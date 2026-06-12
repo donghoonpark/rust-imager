@@ -2,5 +2,6 @@
 
 pub mod command;
 pub mod discovery;
+pub mod inspect;
 pub mod shrink;
 pub mod tools;
