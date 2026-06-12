@@ -54,6 +54,9 @@ pub enum VerifyError {
     /// Metadata serialization failed.
     #[error("metadata serialization failed: {0}")]
     Json(serde_json::Error),
+    /// Existing sidecar or partial metadata would be overwritten.
+    #[error("metadata output already exists: {0}")]
+    OutputExists(PathBuf),
 }
 
 /// Perform the requested verification.
@@ -131,6 +134,12 @@ pub fn write_sidecar(image: &Path, metadata: &ImageMetadata) -> Result<PathBuf, 
     );
     let sidecar = image.with_extension(extension);
     let partial = sidecar.with_extension("json.partial");
+    if sidecar.exists() {
+        return Err(VerifyError::OutputExists(sidecar));
+    }
+    if partial.exists() {
+        return Err(VerifyError::OutputExists(partial));
+    }
     let json = serde_json::to_vec_pretty(metadata).map_err(VerifyError::Json)?;
     let mut file = File::create(&partial).map_err(|source| io_error(&partial, source))?;
     file.write_all(&json)

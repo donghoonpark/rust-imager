@@ -49,6 +49,9 @@ pub enum ExtractError {
     /// Compression level is outside the encoder's accepted range.
     #[error("invalid compression level")]
     InvalidCompressionLevel,
+    /// Final or partial output already exists.
+    #[error("output already exists: {0}")]
+    OutputExists(PathBuf),
     /// A source, output, sync, hash, or rename operation failed.
     #[error("I/O failure at {path}: {source}")]
     Io {
@@ -97,6 +100,12 @@ pub fn extract_path(
         return Err(ExtractError::InvalidOptions);
     }
     let partial = partial_path(output);
+    if output.exists() {
+        return Err(ExtractError::OutputExists(output.to_path_buf()));
+    }
+    if partial.exists() {
+        return Err(ExtractError::OutputExists(partial));
+    }
     let output_file = File::create(&partial).map_err(|source| io_error(&partial, source))?;
     let (sender, receiver) = sync_channel(options.queue_depth);
     let source_path = source.to_path_buf();

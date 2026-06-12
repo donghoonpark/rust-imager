@@ -123,7 +123,21 @@ impl<'a> MountTools<'a> {
     ///
     /// Returns [`CommandError`] when unmount fails.
     pub fn unmount(&self, device: &str) -> Result<CommandResult, CommandError> {
-        self.runner.run(&spec("umount", &[device]))
+        let mounted = self
+            .runner
+            .run(&spec("findmnt", &["-rn", "-S", device, "-o", "TARGET"]).accepting([0, 1]))?;
+        if mounted.stdout.is_empty() {
+            return Ok(CommandResult {
+                status: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            });
+        }
+        let mut last = mounted;
+        for target in last.stdout.lines().map(str::to_owned).collect::<Vec<_>>() {
+            last = self.runner.run(&spec("umount", &[&target]))?;
+        }
+        Ok(last)
     }
 }
 

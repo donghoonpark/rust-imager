@@ -57,6 +57,8 @@ struct BlockDevice {
     #[serde(default)]
     rm: bool,
     #[serde(default)]
+    fstype: Option<String>,
+    #[serde(default)]
     children: Vec<BlockDevice>,
 }
 
@@ -87,11 +89,14 @@ pub fn discover_candidates(
         serde_json::from_str(findmnt_json).map_err(DiscoveryError::InvalidFindmnt)?;
 
     let mut parent_by_child = HashMap::new();
+    let mut excluded = HashSet::new();
     for disk in &topology.blockdevices {
         index_children(disk, &disk.path, &mut parent_by_child);
+        if contains_swap(disk) {
+            excluded.insert(disk.path.clone());
+        }
     }
 
-    let mut excluded = HashSet::new();
     for filesystem in &mounts.filesystems {
         if filesystem.target == "/"
             || filesystem.target == "/boot"
@@ -129,6 +134,10 @@ pub fn discover_candidates(
         .collect();
     candidates.sort_unstable_by(|left, right| left.path.cmp(&right.path));
     Ok(candidates)
+}
+
+fn contains_swap(device: &BlockDevice) -> bool {
+    device.fstype.as_deref() == Some("swap") || device.children.iter().any(contains_swap)
 }
 
 const fn default_sector_size() -> u64 {

@@ -5,6 +5,7 @@ STATE_DIR=/var/lib/rust-imager-grow-root
 STATE_FILE=$STATE_DIR/state
 UNIT=/etc/systemd/system/rust-imager-grow-root.service
 WANTS=/etc/systemd/system/multi-user.target.wants/rust-imager-grow-root.service
+SCRIPT=/usr/lib/rust-imager/grow-root.sh
 
 mkdir -p "$STATE_DIR"
 phase=partition
@@ -58,7 +59,7 @@ case "$phase" in
         "$0"
         ;;
     cleanup)
-        rm -f "$WANTS" "$UNIT" "$STATE_FILE"
+        rm -f "$WANTS" "$UNIT" "$STATE_FILE" "$SCRIPT"
         rmdir "$STATE_DIR" 2>/dev/null || true
         systemctl daemon-reload
         ;;

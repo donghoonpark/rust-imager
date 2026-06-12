@@ -69,3 +69,28 @@ fn source_shorter_than_requested_keeps_partial_file() {
     assert!(!output.exists());
     assert!(output.with_extension("zst.partial").exists());
 }
+
+#[test]
+fn refuses_to_overwrite_existing_output() {
+    let dir = tempdir().expect("tempdir");
+    let source = dir.path().join("source.bin");
+    let output = dir.path().join("image.img.zst");
+    fs::write(&source, b"source").expect("source");
+    fs::write(&output, b"keep").expect("output");
+    assert!(
+        extract_path(
+            &source,
+            &output,
+            &ExtractOptions {
+                bytes: 6,
+                compression: Compression::Zstandard { level: 1 },
+                raw_hash: false,
+                buffer_bytes: 4,
+                queue_depth: 1,
+            },
+            |_| {},
+        )
+        .is_err()
+    );
+    assert_eq!(fs::read(output).expect("preserved"), b"keep");
+}

@@ -16,7 +16,11 @@ impl Runner for FakeRunner {
         self.calls.lock().expect("lock").push(spec.clone());
         Ok(CommandResult {
             status: 0,
-            stdout: String::new(),
+            stdout: if spec.program == "findmnt" {
+                "/mnt/root".into()
+            } else {
+                String::new()
+            },
             stderr: String::new(),
         })
     }
@@ -67,5 +71,6 @@ fn mount_commands_are_shell_free() {
         calls[0].args,
         vec!["-o", "rw", "/dev/sda2", "/run/rust-imager/root"]
     );
-    assert_eq!(calls[1].args, vec!["/dev/sda2"]);
+    assert_eq!(calls[1].program, OsString::from("findmnt"));
+    assert_eq!(calls[2].args, vec!["/mnt/root"]);
 }

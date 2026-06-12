@@ -1,13 +1,14 @@
 //! End-to-end imaging application engine.
 
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 use nix::unistd::Uid;
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_core::metadata::ImageMetadata;
+use rust_imager_core::metadata::{ImageMetadata, PartitionMetadata};
 use rust_imager_core::plan::ExecutionPlan;
 use rust_imager_core::plan::{Compression, PlanInput, VerificationLevel, build_plan};
 use rust_imager_core::profile::{LayoutClass, classify_layout};
@@ -42,6 +43,7 @@ struct Prepared {
     root_start_lba: u64,
     root_path: String,
     total_sectors: u64,
+    partitions: Vec<PartitionMetadata>,
 }
 
 /// Refuse unsupported platforms and non-root execution.
@@ -64,7 +66,7 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
             "--json",
             "--bytes",
             "--output",
-            "NAME,PATH,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,MOUNTPOINTS",
+            "NAME,PATH,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE,MOUNTPOINTS",
         ],
     )?;
     let findmnt = run_text(
@@ -77,8 +79,28 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
 
 /// Analyze, shrink, extract, verify, and write metadata.
 pub fn run_image(request: &ImageRequest) -> Result<()> {
-    let prepared = prepare(request)?;
-    execute(request, prepared)
+    let parent = request.output.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let log_path = request.output.with_extension("log");
+    let mut log = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)
+        .with_context(|| format!("refusing to overwrite log {}", log_path.display()))?;
+    writeln!(
+        log,
+        "rust-imager {} source={} output={}",
+        env!("CARGO_PKG_VERSION"),
+        request.device,
+        request.output.display()
+    )?;
+    let result = prepare(request).and_then(|prepared| execute(request, prepared));
+    match &result {
+        Ok(()) => writeln!(log, "result=success")?,
+        Err(error) => writeln!(log, "result=failure error={error:#}")?,
+    }
+    log.sync_all()?;
+    result
 }
 
 fn prepare(request: &ImageRequest) -> Result<Prepared> {
@@ -103,7 +125,12 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
     let _ = fs::remove_dir_all(&mount_base);
     match classify_layout(&mbr, &evidence) {
         LayoutClass::Unsupported(reason) => bail!("unsupported layout: {reason}"),
-        LayoutClass::Recognized(_) | LayoutClass::WarningUnknown => {}
+        LayoutClass::Recognized(_) => {}
+        LayoutClass::WarningUnknown => {
+            eprintln!(
+                "WARNING: layout is compatible but does not match a known Raspberry Pi/ODROID profile"
+            );
+        }
     }
     let root = mbr
         .partitions
@@ -141,6 +168,20 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         .context("device disappeared before mutation")?;
     revalidate_identity(&selected, &current)?;
 
+    let partitions = mbr
+        .partitions
+        .iter()
+        .map(|partition| PartitionMetadata {
+            number: partition.number,
+            type_code: partition.type_code,
+            start_lba: partition.start_lba,
+            end_lba: if partition.number == root.number {
+                plan.shrink.root_end_lba
+            } else {
+                partition.end_lba
+            },
+        })
+        .collect();
     Ok(Prepared {
         selected,
         plan,
@@ -148,6 +189,7 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         root_start_lba: root.start_lba,
         root_path,
         total_sectors,
+        partitions,
     })
 }
 
@@ -211,12 +253,17 @@ fn execute(request: &ImageRequest, prepared: Prepared) -> Result<()> {
             .then(|| PathBuf::from(&prepared.selected.path)),
     })?;
     let metadata = ImageMetadata::new(
-        prepared.selected.path,
+        prepared.selected.path.clone(),
         extracted.raw_bytes,
         extracted.compressed_bytes,
         request.compression,
         verification,
         extracted.compressed_sha256,
+    )
+    .with_source_layout(
+        prepared.selected.size_bytes,
+        prepared.selected.logical_sector_size,
+        prepared.partitions,
     );
     let sidecar = write_sidecar(&request.output, &metadata)?;
     println!(
