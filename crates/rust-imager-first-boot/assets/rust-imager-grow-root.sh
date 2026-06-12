@@ -16,8 +16,9 @@ fi
 
 root_source=$(findmnt -nro SOURCE /)
 root_device=$(readlink -f "$root_source")
+root_name=$(basename "$root_device")
 parent_name=$(lsblk -nro PKNAME "$root_device")
-part_number=$(lsblk -nro PARTN "$root_device")
+part_number=$(cat "/sys/class/block/$root_name/partition")
 
 if [ -z "$parent_name" ] || [ -z "$part_number" ]; then
     echo "Unable to identify root disk and partition" >&2
