@@ -2,3 +2,4 @@
 
 pub mod extract;
 pub mod progress;
+pub mod verify;

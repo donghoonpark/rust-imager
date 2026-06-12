@@ -3,5 +3,6 @@
 pub mod device;
 pub mod filesystem;
 pub mod mbr;
+pub mod metadata;
 pub mod plan;
 pub mod profile;
