@@ -154,7 +154,11 @@ pub fn inspect_filesystems(
 /// Build a conventional partition path for `/dev/sdX`.
 #[must_use]
 pub fn partition_path(disk: &str, number: u8) -> String {
-    format!("{disk}{number}")
+    if disk.as_bytes().last().is_some_and(u8::is_ascii_digit) {
+        format!("{disk}p{number}")
+    } else {
+        format!("{disk}{number}")
+    }
 }
 
 fn inspect_mount(

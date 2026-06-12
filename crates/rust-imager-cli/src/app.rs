@@ -18,8 +18,10 @@ use rust_imager_linux::inspect::{
     ext4_geometry, inspect_filesystems, partition_path, read_mbr_from_disk,
 };
 use rust_imager_linux::shrink::{LinuxShrinkBackend, ShrinkRequest, execute_shrink};
-use rust_imager_pipeline::extract::{ExtractOptions, extract_path};
-use rust_imager_pipeline::verify::{VerifyRequest, verify_image, write_sidecar};
+use rust_imager_pipeline::extract::{ExtractOptions, extract_path, partial_path};
+use rust_imager_pipeline::verify::{
+    VerifyRequest, sidecar_partial_path, sidecar_path, verify_image, write_sidecar,
+};
 
 /// Fully confirmed imaging request.
 #[derive(Debug, Clone)]
@@ -34,6 +36,26 @@ pub struct ImageRequest {
     pub compression: Compression,
     /// Verification policy.
     pub verification: VerificationLevel,
+}
+
+/// Observable engine state for terminal and non-interactive frontends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineEvent {
+    /// Device and filesystem analysis is running.
+    Preparing,
+    /// The source filesystem and partition are being modified.
+    Mutating,
+    /// Raw source bytes are being extracted.
+    Extracting {
+        /// Bytes read from the source.
+        bytes: u64,
+        /// Total planned bytes.
+        total: u64,
+    },
+    /// The completed image is being verified.
+    Verifying,
+    /// Image and metadata finalization completed.
+    Complete,
 }
 
 struct Prepared {
@@ -79,9 +101,27 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
 
 /// Analyze, shrink, extract, verify, and write metadata.
 pub fn run_image(request: &ImageRequest) -> Result<()> {
+    run_image_with_progress(request, |event| match event {
+        EngineEvent::Preparing => eprintln!("preparing imaging plan"),
+        EngineEvent::Mutating => eprintln!("shrinking source filesystem and partition"),
+        EngineEvent::Extracting { bytes, total } => {
+            eprintln!("extracting: {bytes} / {total} bytes");
+        }
+        EngineEvent::Verifying => eprintln!("verifying image"),
+        EngineEvent::Complete => {}
+    })
+}
+
+/// Run imaging while reporting high-level state and byte progress.
+pub fn run_image_with_progress(
+    request: &ImageRequest,
+    mut on_event: impl FnMut(EngineEvent),
+) -> Result<()> {
     let parent = request.output.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
-    let log_path = request.output.with_extension("log");
+    validate_request(request)?;
+    on_event(EngineEvent::Preparing);
+    let log_path = append_suffix(&request.output, ".log");
     let mut log = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -94,13 +134,47 @@ pub fn run_image(request: &ImageRequest) -> Result<()> {
         request.device,
         request.output.display()
     )?;
-    let result = prepare(request).and_then(|prepared| execute(request, prepared));
+    let result = prepare(request).and_then(|prepared| execute(request, prepared, &mut on_event));
     match &result {
         Ok(()) => writeln!(log, "result=success")?,
         Err(error) => writeln!(log, "result=failure error={error:#}")?,
     }
     log.sync_all()?;
     result
+}
+
+fn validate_request(request: &ImageRequest) -> Result<()> {
+    let expected_extension = match request.compression {
+        Compression::Zstandard { level } => {
+            ensure!(
+                (-7..=22).contains(&level),
+                "zstd level must be between -7 and 22"
+            );
+            "zst"
+        }
+        Compression::Xz { level } => {
+            ensure!(level <= 9, "xz level must be between 0 and 9");
+            "xz"
+        }
+    };
+    ensure!(
+        request.output.extension().and_then(|value| value.to_str()) == Some(expected_extension),
+        "output extension must be .{expected_extension}"
+    );
+    for path in [
+        request.output.clone(),
+        partial_path(&request.output),
+        sidecar_path(&request.output),
+        sidecar_partial_path(&request.output),
+        append_suffix(&request.output, ".log"),
+    ] {
+        ensure!(
+            !path_occupied(&path)?,
+            "output already exists: {}",
+            path.display()
+        );
+    }
+    Ok(())
 }
 
 fn prepare(request: &ImageRequest) -> Result<Prepared> {
@@ -193,7 +267,11 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
     })
 }
 
-fn execute(request: &ImageRequest, prepared: Prepared) -> Result<()> {
+fn execute(
+    request: &ImageRequest,
+    prepared: Prepared,
+    on_event: &mut impl FnMut(EngineEvent),
+) -> Result<()> {
     let runner = ProcessRunner;
     let current = discover(Some(&request.output))?
         .into_iter()
@@ -210,6 +288,7 @@ fn execute(request: &ImageRequest, prepared: Prepared) -> Result<()> {
         target_filesystem_kib: prepared.plan.shrink.target_filesystem_bytes / 1024,
     };
     let mutation_mount = PathBuf::from(format!("/run/rust-imager/root-{}", std::process::id()));
+    on_event(EngineEvent::Mutating);
     execute_shrink(
         &LinuxShrinkBackend::new(&runner, mutation_mount.clone()),
         &shrink,
@@ -237,12 +316,13 @@ fn execute(request: &ImageRequest, prepared: Prepared) -> Result<()> {
             queue_depth: 4,
         },
         |progress| {
-            eprintln!(
-                "extracting: {} / {} bytes",
-                progress.bytes_read, progress.total_bytes
-            );
+            on_event(EngineEvent::Extracting {
+                bytes: progress.bytes_read,
+                total: progress.total_bytes,
+            });
         },
     )?;
+    on_event(EngineEvent::Verifying);
     let verification = verify_image(&VerifyRequest {
         image: request.output.clone(),
         compression: request.compression,
@@ -271,7 +351,22 @@ fn execute(request: &ImageRequest, prepared: Prepared) -> Result<()> {
         request.output.display(),
         sidecar.display()
     );
+    on_event(EngineEvent::Complete);
     Ok(())
+}
+
+fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+fn path_occupied(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("unable to inspect {}", path.display())),
+    }
 }
 
 fn ensure_local_output(runner: &dyn Runner, path: &Path) -> Result<()> {
@@ -308,4 +403,51 @@ fn run_text(runner: &dyn Runner, program: &str, args: &[&str]) -> Result<String>
         .run(&spec)
         .with_context(|| format!("failed to run {program}"))?
         .stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(output: PathBuf, compression: Compression) -> ImageRequest {
+        ImageRequest {
+            device: "/dev/sdz".into(),
+            output,
+            confirm_model: "fixture".into(),
+            compression,
+            verification: VerificationLevel::Decode,
+        }
+    }
+
+    #[test]
+    fn validates_compression_extension_and_level() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        validate_request(&request(
+            directory.path().join("image.zst"),
+            Compression::Zstandard { level: 3 },
+        ))
+        .expect("valid zstd request");
+        assert!(
+            validate_request(&request(
+                directory.path().join("image.xz"),
+                Compression::Zstandard { level: 3 },
+            ))
+            .is_err()
+        );
+        assert!(
+            validate_request(&request(
+                directory.path().join("image.xz"),
+                Compression::Xz { level: 10 },
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_any_existing_output_artifact() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let output = directory.path().join("image.zst");
+        fs::write(sidecar_path(&output), b"existing").expect("fixture");
+        assert!(validate_request(&request(output, Compression::Zstandard { level: 3 })).is_err());
+    }
 }

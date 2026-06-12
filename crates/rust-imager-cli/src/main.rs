@@ -93,7 +93,8 @@ fn main() -> Result<()> {
         }
         None => {
             let devices = app::discover(None)?;
-            app::run_image(&wizard::run(devices)?)?;
+            let request = wizard::run(devices)?;
+            wizard::run_operation(&request)?;
         }
     }
     Ok(())

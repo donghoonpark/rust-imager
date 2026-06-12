@@ -16,23 +16,79 @@ use rust_imager_core::plan::{Compression, VerificationLevel};
 use rust_imager_tui::model::{Action, AppModel, Screen};
 use rust_imager_tui::view::draw;
 
-use crate::app::ImageRequest;
+use crate::app::{EngineEvent, ImageRequest};
 
 /// Run the keyboard-only setup wizard.
 pub fn run(devices: Vec<DeviceIdentity>) -> Result<ImageRequest> {
     if devices.is_empty() {
         bail!("no safe external USB /dev/sdX devices found");
     }
+    with_terminal(|terminal| event_loop(terminal, AppModel::new(devices)))
+}
+
+/// Execute a confirmed request while retaining progress inside the TUI.
+pub fn run_operation(request: &ImageRequest) -> Result<()> {
+    with_terminal(|terminal| {
+        let mut model = AppModel::new(Vec::new());
+        model.output = request.output.to_string_lossy().into_owned();
+        model.compression = request.compression;
+        model.verification = request.verification;
+        model.reduce(Action::PreparationStarted);
+        terminal.draw(|frame| draw(frame, &model))?;
+
+        let mut draw_error = None;
+        let result = crate::app::run_image_with_progress(request, |event| {
+            match event {
+                EngineEvent::Preparing => model.reduce(Action::PreparationStarted),
+                EngineEvent::Mutating => model.reduce(Action::MutationStarted),
+                EngineEvent::Extracting { bytes, total } => {
+                    model.reduce(Action::ExtractionStarted);
+                    model.reduce(Action::Progress { bytes, total });
+                }
+                EngineEvent::Verifying => model.reduce(Action::VerificationStarted),
+                EngineEvent::Complete => model.reduce(Action::Finished),
+            }
+            if let Err(error) = terminal.draw(|frame| draw(frame, &model)) {
+                draw_error = Some(error);
+            }
+        });
+        if let Some(error) = draw_error {
+            return Err(error.into());
+        }
+        if let Err(error) = result {
+            model.reduce(Action::Failed(format!("{error:#}")));
+            terminal.draw(|frame| draw(frame, &model))?;
+            return Err(error);
+        }
+        wait_for_acknowledgement(terminal)
+    })
+}
+
+fn with_terminal<T>(
+    operation: impl FnOnce(&mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<T>,
+) -> Result<T> {
     enable_raw_mode()?;
     let mut output = stdout();
     execute!(output, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(output);
     let mut terminal = Terminal::new(backend)?;
-    let result = event_loop(&mut terminal, AppModel::new(devices));
+    let result = operation(&mut terminal);
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     result
+}
+
+fn wait_for_acknowledgement(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+    loop {
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+            && matches!(key.code, KeyCode::Enter | KeyCode::Esc)
+        {
+            terminal.show_cursor()?;
+            return Ok(());
+        }
+    }
 }
 
 fn event_loop(

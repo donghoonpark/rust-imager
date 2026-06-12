@@ -128,12 +128,8 @@ pub fn verify_image(request: &VerifyRequest) -> Result<VerificationResult, Verif
 /// Returns [`VerifyError`] for JSON serialization, write, sync, or rename
 /// failures.
 pub fn write_sidecar(image: &Path, metadata: &ImageMetadata) -> Result<PathBuf, VerifyError> {
-    let extension = image.extension().map_or_else(
-        || "json".into(),
-        |value| format!("{}.json", value.to_string_lossy()),
-    );
-    let sidecar = image.with_extension(extension);
-    let partial = sidecar.with_extension("json.partial");
+    let sidecar = sidecar_path(image);
+    let partial = sidecar_partial_path(image);
     if sidecar.exists() {
         return Err(VerifyError::OutputExists(sidecar));
     }
@@ -149,7 +145,24 @@ pub fn write_sidecar(image: &Path, metadata: &ImageMetadata) -> Result<PathBuf, 
     file.sync_all()
         .map_err(|source| io_error(&partial, source))?;
     fs::rename(&partial, &sidecar).map_err(|source| io_error(&sidecar, source))?;
+    sync_parent(&sidecar)?;
     Ok(sidecar)
+}
+
+/// Return the JSON metadata path for an image.
+#[must_use]
+pub fn sidecar_path(image: &Path) -> PathBuf {
+    let extension = image.extension().map_or_else(
+        || "json".into(),
+        |value| format!("{}.json", value.to_string_lossy()),
+    );
+    image.with_extension(extension)
+}
+
+/// Return the retained partial JSON metadata path for an image.
+#[must_use]
+pub fn sidecar_partial_path(image: &Path) -> PathBuf {
+    sidecar_path(image).with_extension("json.partial")
 }
 
 fn hash_decoded(request: &VerifyRequest) -> Result<(u64, String), VerifyError> {
@@ -207,6 +220,15 @@ fn io_error(path: &Path, source: std::io::Error) -> VerifyError {
         path: path.to_path_buf(),
         source,
     }
+}
+
+fn sync_parent(output: &Path) -> Result<(), VerifyError> {
+    if let Some(parent) = output.parent() {
+        File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|source| io_error(parent, source))?;
+    }
+    Ok(())
 }
 
 fn hex(bytes: &[u8]) -> String {

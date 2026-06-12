@@ -103,6 +103,11 @@ fn render_body(frame: &mut Frame<'_>, area: ratatui::layout::Rect, model: &AppMo
                 area,
             );
         }
+        Screen::Preparing => frame.render_widget(
+            Paragraph::new("Inspecting the device, filesystems, output, and immutable plan")
+                .block(Block::default().borders(Borders::ALL)),
+            area,
+        ),
         Screen::Mutating => frame.render_widget(
             warning("DO NOT REMOVE POWER: filesystem and partition metadata are changing"),
             area,
@@ -116,6 +121,11 @@ fn render_body(frame: &mut Frame<'_>, area: ratatui::layout::Rect, model: &AppMo
                 area,
             );
         }
+        Screen::Verifying => frame.render_widget(
+            Paragraph::new("Verifying the compressed image and writing metadata")
+                .block(Block::default().borders(Borders::ALL)),
+            area,
+        ),
         Screen::Complete => frame.render_widget(
             Paragraph::new("Image extraction and verification completed")
                 .block(Block::default().borders(Borders::ALL)),

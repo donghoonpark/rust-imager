@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use rust_imager_linux::inspect::{parse_ext4_geometry, read_mbr_from_disk};
+use rust_imager_linux::inspect::{parse_ext4_geometry, partition_path, read_mbr_from_disk};
 use tempfile::tempdir;
 
 #[test]
@@ -29,4 +29,11 @@ fn parses_ext4_block_geometry() {
     .expect("geometry");
     assert_eq!(geometry.minimum_bytes, 4_096_000);
     assert_eq!(geometry.current_bytes, 32_768_000);
+}
+
+#[test]
+fn builds_partition_paths_for_sd_and_numbered_devices() {
+    assert_eq!(partition_path("/dev/sda", 2), "/dev/sda2");
+    assert_eq!(partition_path("/dev/loop0", 2), "/dev/loop0p2");
+    assert_eq!(partition_path("/dev/nvme0n1", 2), "/dev/nvme0n1p2");
 }

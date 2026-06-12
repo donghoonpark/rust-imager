@@ -257,7 +257,9 @@ fn hasher_writer(hasher: &mut Sha256) -> impl Write + '_ {
     Writer(hasher)
 }
 
-fn partial_path(output: &Path) -> PathBuf {
+/// Return the retained partial path for an image output.
+#[must_use]
+pub fn partial_path(output: &Path) -> PathBuf {
     let extension = output.extension().map_or_else(
         || "partial".into(),
         |value| format!("{}.partial", value.to_string_lossy()),

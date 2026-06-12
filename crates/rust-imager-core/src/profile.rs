@@ -51,7 +51,7 @@ pub fn classify_layout(mbr: &Mbr, evidence: &[PartitionEvidence]) -> LayoutClass
         .iter()
         .find(|item| item.filesystem == FilesystemEvidence::Fat)
     else {
-        return LayoutClass::Unsupported("FAT boot partition not found".into());
+        return LayoutClass::WarningUnknown;
     };
     let has = |name: &str| boot.boot_files.iter().any(|file| file == name);
     if has("config.txt") && boot.boot_files.iter().any(|file| file.starts_with("start")) {

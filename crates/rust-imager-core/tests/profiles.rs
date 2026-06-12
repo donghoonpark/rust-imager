@@ -82,3 +82,20 @@ fn rejects_non_ext4_last_partition() {
         LayoutClass::Unsupported(_)
     ));
 }
+
+#[test]
+fn ext4_only_layout_requires_warning_instead_of_profile_match() {
+    let mbr = Mbr {
+        partitions: vec![partition(1, PartitionKind::Linux, 2048, 99_999)],
+    };
+    let evidence = vec![PartitionEvidence {
+        number: 1,
+        filesystem: FilesystemEvidence::Ext4,
+        root_directories: vec!["etc".into(), "usr".into(), "var".into()],
+        boot_files: vec![],
+    }];
+    assert_eq!(
+        classify_layout(&mbr, &evidence),
+        LayoutClass::WarningUnknown
+    );
+}

@@ -16,10 +16,14 @@ pub enum Screen {
     Verification,
     /// Final immutable plan review.
     Review,
+    /// Device and filesystem analysis is running.
+    Preparing,
     /// Destructive shrink is running.
     Mutating,
     /// Extraction is running.
     Extracting,
+    /// Completed image verification is running.
+    Verifying,
     /// Operation completed.
     Complete,
 }
@@ -41,8 +45,12 @@ pub enum Action {
     Continue,
     /// Mutation started.
     MutationStarted,
+    /// Preflight analysis started.
+    PreparationStarted,
     /// Extraction started.
     ExtractionStarted,
+    /// Verification started.
+    VerificationStarted,
     /// Update raw byte progress.
     Progress {
         /// Bytes consumed.
@@ -114,8 +122,10 @@ impl AppModel {
             Action::SetCompression(value) => self.compression = value,
             Action::SetVerification(value) => self.verification = value,
             Action::Continue => self.continue_current(),
+            Action::PreparationStarted => self.screen = Screen::Preparing,
             Action::MutationStarted => self.screen = Screen::Mutating,
             Action::ExtractionStarted => self.screen = Screen::Extracting,
+            Action::VerificationStarted => self.screen = Screen::Verifying,
             Action::Progress { bytes, total } => {
                 self.progress_bytes = bytes;
                 self.progress_total = total;
