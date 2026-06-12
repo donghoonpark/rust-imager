@@ -13,6 +13,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use rust_imager_core::device::DeviceIdentity;
 use rust_imager_core::plan::{Compression, VerificationLevel};
+use rust_imager_core::profile::LayoutClass;
 use rust_imager_tui::model::{Action, AppModel, Screen};
 use rust_imager_tui::view::draw;
 
@@ -40,6 +41,9 @@ pub fn run_operation(request: &ImageRequest) -> Result<()> {
         let result = crate::app::run_image_with_progress(request, |event| {
             match event {
                 EngineEvent::Preparing => model.reduce(Action::PreparationStarted),
+                EngineEvent::WarningUnknownLayout => {
+                    model.reduce(Action::SetUnknownLayoutWarning(true));
+                }
                 EngineEvent::Mutating => model.reduce(Action::MutationStarted),
                 EngineEvent::Extracting { bytes, total } => {
                     model.reduce(Action::ExtractionStarted);
@@ -115,7 +119,19 @@ fn event_loop(
                     let index = usize::try_from(value.to_digit(10).unwrap_or(0))
                         .unwrap_or(0)
                         .saturating_sub(1);
-                    model.reduce(Action::SelectDevice(index));
+                    let Some(device) = model.devices.get(index).cloned() else {
+                        model.reduce(Action::Failed("Invalid device selection".into()));
+                        continue;
+                    };
+                    match crate::app::analyze_layout(&device) {
+                        Ok(layout) => {
+                            model.reduce(Action::SelectDevice(index));
+                            model.reduce(Action::SetUnknownLayoutWarning(
+                                layout == LayoutClass::WarningUnknown,
+                            ));
+                        }
+                        Err(error) => model.reduce(Action::Failed(format!("{error:#}"))),
+                    }
                 }
             }
             Screen::ConfirmDevice => match key.code {

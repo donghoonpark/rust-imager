@@ -80,9 +80,14 @@ fn render_body(frame: &mut Frame<'_>, area: ratatui::layout::Rect, model: &AppMo
         }
         Screen::ConfirmDevice => {
             let device = model.selected_device();
+            let profile_warning = if model.unknown_layout_warning {
+                "STRONG WARNING: this layout does not match a known Raspberry Pi/ODROID profile.\n"
+            } else {
+                ""
+            };
             frame.render_widget(
                 Paragraph::new(format!(
-                    "WARNING: the source eMMC will be modified and left shrunken.\n\
+                    "{profile_warning}WARNING: the source eMMC will be modified and left shrunken.\n\
                      Device: {}\nModel: {}\n\nType model: {}",
                     device.map_or("?", |value| value.path.as_str()),
                     device.map_or("?", |value| value.model.as_str()),

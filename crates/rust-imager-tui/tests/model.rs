@@ -41,3 +41,12 @@ fn small_terminal_render_does_not_panic() {
         .draw(|frame| draw(frame, &model))
         .expect("small render");
 }
+
+#[test]
+fn retains_unknown_layout_warning_on_confirmation_screen() {
+    let mut model = AppModel::new(vec![device()]);
+    model.reduce(Action::SelectDevice(0));
+    model.reduce(Action::SetUnknownLayoutWarning(true));
+    assert_eq!(model.screen, Screen::ConfirmDevice);
+    assert!(model.unknown_layout_warning);
+}

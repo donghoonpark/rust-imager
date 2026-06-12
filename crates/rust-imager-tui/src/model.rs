@@ -62,6 +62,8 @@ pub enum Action {
     Finished,
     /// Show an actionable error.
     Failed(String),
+    /// Record whether the selected layout needs a strong warning.
+    SetUnknownLayoutWarning(bool),
 }
 
 /// Complete serializable-independent UI state.
@@ -83,6 +85,8 @@ pub struct AppModel {
     pub verification: VerificationLevel,
     /// Latest error message.
     pub error: Option<String>,
+    /// Whether the selected layout is structurally safe but unrecognized.
+    pub unknown_layout_warning: bool,
     /// Bytes processed.
     pub progress_bytes: u64,
     /// Planned bytes.
@@ -102,6 +106,7 @@ impl AppModel {
             compression: Compression::Zstandard { level: 3 },
             verification: VerificationLevel::Decode,
             error: None,
+            unknown_layout_warning: false,
             progress_bytes: 0,
             progress_total: 0,
         }
@@ -132,6 +137,7 @@ impl AppModel {
             }
             Action::Finished => self.screen = Screen::Complete,
             Action::Failed(message) => self.error = Some(message),
+            Action::SetUnknownLayoutWarning(value) => self.unknown_layout_warning = value,
         }
     }
 

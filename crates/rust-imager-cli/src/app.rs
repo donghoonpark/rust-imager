@@ -43,6 +43,8 @@ pub struct ImageRequest {
 pub enum EngineEvent {
     /// Device and filesystem analysis is running.
     Preparing,
+    /// The layout is safe enough to continue but does not match a known profile.
+    WarningUnknownLayout,
     /// The source filesystem and partition are being modified.
     Mutating,
     /// Raw source bytes are being extracted.
@@ -66,6 +68,12 @@ struct Prepared {
     root_path: String,
     total_sectors: u64,
     partitions: Vec<PartitionMetadata>,
+    unknown_layout_warning: bool,
+}
+
+struct Analysis {
+    mbr: rust_imager_core::mbr::Mbr,
+    layout: LayoutClass,
 }
 
 /// Refuse unsupported platforms and non-root execution.
@@ -101,15 +109,26 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
 
 /// Analyze, shrink, extract, verify, and write metadata.
 pub fn run_image(request: &ImageRequest) -> Result<()> {
-    run_image_with_progress(request, |event| match event {
+    let result = run_image_with_progress(request, |event| match event {
         EngineEvent::Preparing => eprintln!("preparing imaging plan"),
+        EngineEvent::WarningUnknownLayout => {
+            eprintln!("STRONG WARNING: layout does not match a known Raspberry Pi/ODROID profile");
+        }
         EngineEvent::Mutating => eprintln!("shrinking source filesystem and partition"),
         EngineEvent::Extracting { bytes, total } => {
             eprintln!("extracting: {bytes} / {total} bytes");
         }
         EngineEvent::Verifying => eprintln!("verifying image"),
         EngineEvent::Complete => {}
-    })
+    });
+    if result.is_ok() {
+        println!(
+            "completed: {} (metadata: {})",
+            request.output.display(),
+            sidecar_path(&request.output).display()
+        );
+    }
+    result
 }
 
 /// Run imaging while reporting high-level state and byte progress.
@@ -134,10 +153,35 @@ pub fn run_image_with_progress(
         request.device,
         request.output.display()
     )?;
-    let result = prepare(request).and_then(|prepared| execute(request, prepared, &mut on_event));
+    let mut stage = "preparing";
+    let mut source_modified = false;
+    let result = prepare(request).and_then(|prepared| {
+        if prepared.unknown_layout_warning {
+            on_event(EngineEvent::WarningUnknownLayout);
+        }
+        execute(request, prepared, &mut |event| {
+            match event {
+                EngineEvent::Mutating => {
+                    stage = "mutating";
+                    source_modified = true;
+                }
+                EngineEvent::Extracting { .. } => stage = "extracting",
+                EngineEvent::Verifying => stage = "verifying",
+                EngineEvent::Complete => stage = "complete",
+                EngineEvent::Preparing | EngineEvent::WarningUnknownLayout => {}
+            }
+            on_event(event);
+        })
+    });
     match &result {
-        Ok(()) => writeln!(log, "result=success")?,
-        Err(error) => writeln!(log, "result=failure error={error:#}")?,
+        Ok(()) => writeln!(
+            log,
+            "result=success stage={stage} source_modified={source_modified}"
+        )?,
+        Err(error) => writeln!(
+            log,
+            "result=failure stage={stage} source_modified={source_modified} error={error:#}"
+        )?,
     }
     log.sync_all()?;
     result
@@ -189,23 +233,17 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         "device model confirmation does not match"
     );
     let runner = ProcessRunner;
+    let analysis = analyze(&selected)?;
+    match &analysis.layout {
+        LayoutClass::Unsupported(reason) => bail!("unsupported layout: {reason}"),
+        LayoutClass::Recognized(_) | LayoutClass::WarningUnknown => {}
+    }
+    let unknown_layout_warning = analysis.layout == LayoutClass::WarningUnknown;
+    let mbr = analysis.mbr;
     let total_sectors = selected
         .size_bytes
         .checked_div(selected.logical_sector_size)
         .context("invalid device sector size")?;
-    let mbr = read_mbr_from_disk(Path::new(&selected.path), total_sectors)?;
-    let mount_base = PathBuf::from(format!("/run/rust-imager/inspect-{}", std::process::id()));
-    let evidence = inspect_filesystems(&runner, &selected.path, &mbr, &mount_base)?;
-    let _ = fs::remove_dir_all(&mount_base);
-    match classify_layout(&mbr, &evidence) {
-        LayoutClass::Unsupported(reason) => bail!("unsupported layout: {reason}"),
-        LayoutClass::Recognized(_) => {}
-        LayoutClass::WarningUnknown => {
-            eprintln!(
-                "WARNING: layout is compatible but does not match a known Raspberry Pi/ODROID profile"
-            );
-        }
-    }
     let root = mbr
         .partitions
         .iter()
@@ -264,7 +302,33 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         root_path,
         total_sectors,
         partitions,
+        unknown_layout_warning,
     })
+}
+
+/// Inspect a candidate without modifying it and classify its SBC layout.
+pub fn analyze_layout(device: &DeviceIdentity) -> Result<LayoutClass> {
+    let analysis = analyze(device)?;
+    if let LayoutClass::Unsupported(reason) = &analysis.layout {
+        bail!("unsupported layout: {reason}");
+    }
+    Ok(analysis.layout)
+}
+
+fn analyze(device: &DeviceIdentity) -> Result<Analysis> {
+    let total_sectors = device
+        .size_bytes
+        .checked_div(device.logical_sector_size)
+        .context("invalid device sector size")?;
+    let mbr = read_mbr_from_disk(Path::new(&device.path), total_sectors)?;
+    let runner = ProcessRunner;
+    let mount_base = tempfile::Builder::new()
+        .prefix("rust-imager-inspect-")
+        .tempdir_in("/run")
+        .context("unable to create secure inspection mount directory")?;
+    let evidence = inspect_filesystems(&runner, &device.path, &mbr, mount_base.path())?;
+    let layout = classify_layout(&mbr, &evidence);
+    Ok(Analysis { mbr, layout })
 }
 
 fn execute(
@@ -287,13 +351,15 @@ fn execute(
         root_end_lba: prepared.plan.shrink.root_end_lba,
         target_filesystem_kib: prepared.plan.shrink.target_filesystem_bytes / 1024,
     };
-    let mutation_mount = PathBuf::from(format!("/run/rust-imager/root-{}", std::process::id()));
+    let mutation_mount = tempfile::Builder::new()
+        .prefix("rust-imager-root-")
+        .tempdir_in("/run")
+        .context("unable to create secure mutation mount directory")?;
     on_event(EngineEvent::Mutating);
     execute_shrink(
-        &LinuxShrinkBackend::new(&runner, mutation_mount.clone()),
+        &LinuxShrinkBackend::new(&runner, mutation_mount.path().to_path_buf()),
         &shrink,
     )?;
-    let _ = fs::remove_dir_all(mutation_mount);
     let changed = read_mbr_from_disk(Path::new(&prepared.selected.path), prepared.total_sectors)?;
     let changed_root = changed
         .partitions
@@ -345,12 +411,7 @@ fn execute(
         prepared.selected.logical_sector_size,
         prepared.partitions,
     );
-    let sidecar = write_sidecar(&request.output, &metadata)?;
-    println!(
-        "completed: {} (metadata: {})",
-        request.output.display(),
-        sidecar.display()
-    );
+    write_sidecar(&request.output, &metadata)?;
     on_event(EngineEvent::Complete);
     Ok(())
 }
