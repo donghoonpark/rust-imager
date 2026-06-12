@@ -46,9 +46,9 @@ pub enum ExtractError {
     /// Invalid buffer or byte configuration.
     #[error("invalid extraction options")]
     InvalidOptions,
-    /// XZ is implemented by the compression module in the next feature stage.
-    #[error("compression format is not available")]
-    UnsupportedCompression,
+    /// Compression level is outside the encoder's accepted range.
+    #[error("invalid compression level")]
+    InvalidCompressionLevel,
     /// A source, output, sync, hash, or rename operation failed.
     #[error("I/O failure at {path}: {source}")]
     Io {
@@ -96,10 +96,6 @@ pub fn extract_path(
     if options.bytes == 0 || options.buffer_bytes == 0 || options.queue_depth == 0 {
         return Err(ExtractError::InvalidOptions);
     }
-    let Compression::Zstandard { level } = options.compression else {
-        return Err(ExtractError::UnsupportedCompression);
-    };
-
     let partial = partial_path(output);
     let output_file = File::create(&partial).map_err(|source| io_error(&partial, source))?;
     let (sender, receiver) = sync_channel(options.queue_depth);
@@ -110,13 +106,30 @@ pub fn extract_path(
     let reader =
         thread::spawn(move || read_source(&source_path, bytes, buffer_bytes, raw_hash, &sender));
 
-    let mut encoder =
-        zstd::Encoder::new(output_file, level).map_err(|source| io_error(&partial, source))?;
-    let (raw_bytes, raw_sha256) =
-        consume(&receiver, &mut encoder, options.bytes, &mut on_progress)?;
-    let output_file = encoder
-        .finish()
-        .map_err(|source| io_error(&partial, source))?;
+    let (output_file, raw_bytes, raw_sha256) = match options.compression {
+        Compression::Zstandard { level } => {
+            let mut encoder = zstd::Encoder::new(output_file, level)
+                .map_err(|source| io_error(&partial, source))?;
+            let (raw_bytes, raw_sha256) =
+                consume(&receiver, &mut encoder, options.bytes, &mut on_progress)?;
+            let file = encoder
+                .finish()
+                .map_err(|source| io_error(&partial, source))?;
+            (file, raw_bytes, raw_sha256)
+        }
+        Compression::Xz { level } => {
+            if level > 9 {
+                return Err(ExtractError::InvalidCompressionLevel);
+            }
+            let mut encoder = xz2::write::XzEncoder::new(output_file, level);
+            let (raw_bytes, raw_sha256) =
+                consume(&receiver, &mut encoder, options.bytes, &mut on_progress)?;
+            let file = encoder
+                .finish()
+                .map_err(|source| io_error(&partial, source))?;
+            (file, raw_bytes, raw_sha256)
+        }
+    };
     output_file
         .sync_all()
         .map_err(|source| io_error(&partial, source))?;
