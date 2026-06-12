@@ -1,0 +1,13 @@
+[Unit]
+Description=Expand rust-imager root filesystem
+After=local-fs.target
+Before=multi-user.target
+ConditionPathExists=/usr/lib/rust-imager/grow-root.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/rust-imager/grow-root.sh
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
