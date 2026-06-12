@@ -15,6 +15,8 @@ pub struct CommandSpec {
     pub args: Vec<OsString>,
     /// Optional bytes supplied to standard input.
     pub stdin: Option<Vec<u8>>,
+    /// Exit statuses considered successful.
+    pub accepted_statuses: Vec<i32>,
 }
 
 impl CommandSpec {
@@ -24,6 +26,7 @@ impl CommandSpec {
             program: program.into(),
             args: args.into_iter().collect(),
             stdin: None,
+            accepted_statuses: vec![0],
         }
     }
 
@@ -31,6 +34,13 @@ impl CommandSpec {
     #[must_use]
     pub fn with_stdin(mut self, stdin: impl Into<Vec<u8>>) -> Self {
         self.stdin = Some(stdin.into());
+        self
+    }
+
+    /// Replace the accepted exit-status set.
+    #[must_use]
+    pub fn accepting(mut self, statuses: impl IntoIterator<Item = i32>) -> Self {
+        self.accepted_statuses = statuses.into_iter().collect();
         self
     }
 }
@@ -123,7 +133,7 @@ impl Runner for ProcessRunner {
         let status = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        if output.status.success() {
+        if spec.accepted_statuses.contains(&status) {
             Ok(CommandResult {
                 status,
                 stdout,

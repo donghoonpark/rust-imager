@@ -44,6 +44,8 @@ struct BlockDevice {
     kind: String,
     #[serde(default)]
     size: u64,
+    #[serde(rename = "log-sec", default = "default_sector_size")]
+    logical_sector_size: u64,
     #[serde(default)]
     tran: Option<String>,
     #[serde(default)]
@@ -120,12 +122,17 @@ pub fn discover_candidates(
             serial: device.serial.unwrap_or_default().trim().to_owned(),
             model: device.model.unwrap_or_default().trim().to_owned(),
             size_bytes: device.size,
+            logical_sector_size: device.logical_sector_size,
             transport: device.tran.unwrap_or_default(),
             removable: device.rm,
         })
         .collect();
     candidates.sort_unstable_by(|left, right| left.path.cmp(&right.path));
     Ok(candidates)
+}
+
+const fn default_sector_size() -> u64 {
+    512
 }
 
 /// Verify that a newly read identity is exactly the selected device.

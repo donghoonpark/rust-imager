@@ -12,6 +12,7 @@ fn device() -> DeviceIdentity {
         serial: "ABC".into(),
         model: "eMMC Reader".into(),
         size_bytes: 64_000_000_000,
+        logical_sector_size: 512,
         transport: "usb".into(),
         removable: true,
     }

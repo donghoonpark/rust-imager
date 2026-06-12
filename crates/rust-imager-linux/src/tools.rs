@@ -23,7 +23,8 @@ impl<'a> E2fsTools<'a> {
     /// Returns [`CommandError`] when `e2fsck` fails.
     pub fn check(&self, device: &str, force_repair: bool) -> Result<CommandResult, CommandError> {
         let mode = if force_repair { "-y" } else { "-p" };
-        self.runner.run(&spec("e2fsck", &["-f", mode, device]))
+        self.runner
+            .run(&spec("e2fsck", &["-f", mode, device]).accepting([0, 1, 2]))
     }
 
     /// Resize ext4 to an explicit KiB target.

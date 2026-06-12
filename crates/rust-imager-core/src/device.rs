@@ -15,6 +15,8 @@ pub struct DeviceIdentity {
     pub model: String,
     /// Capacity in bytes.
     pub size_bytes: u64,
+    /// Logical sector size in bytes.
+    pub logical_sector_size: u64,
     /// Kernel transport name.
     pub transport: String,
     /// Whether the kernel marks the device removable.
