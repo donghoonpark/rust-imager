@@ -8,6 +8,8 @@ ConditionPathExists=/usr/lib/rust-imager/grow-root.sh
 Type=oneshot
 ExecStart=/usr/lib/rust-imager/grow-root.sh
 RemainAfterExit=no
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target

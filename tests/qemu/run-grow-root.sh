@@ -53,6 +53,21 @@ install -m 0644 crates/rust-imager-first-boot/assets/rust-imager-grow-root.servi
     "$mount_dir/etc/systemd/system/rust-imager-grow-root.service"
 ln -s ../rust-imager-grow-root.service \
     "$mount_dir/etc/systemd/system/multi-user.target.wants/rust-imager-grow-root.service"
+cat >"$mount_dir/etc/systemd/system/rust-imager-qemu-poweroff.service" <<'UNIT'
+[Unit]
+Description=Power off after rust-imager QEMU validation
+After=rust-imager-grow-root.service
+ConditionPathExists=!/usr/lib/rust-imager/grow-root.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl poweroff
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+ln -s ../rust-imager-qemu-poweroff.service \
+    "$mount_dir/etc/systemd/system/multi-user.target.wants/rust-imager-qemu-poweroff.service"
 echo qemu-payload >"$mount_dir/etc/rust-imager-payload"
 payload_hash=$(sha256sum "$mount_dir/etc/rust-imager-payload" | cut -d' ' -f1)
 cat >"$mount_dir/etc/default/grub" <<'GRUB'
@@ -72,11 +87,11 @@ truncate -s 2200M "$image"
 status=0
 timeout 180 qemu-system-x86_64 -machine accel=tcg -m 1024 -nographic \
     -drive "file=$image,format=raw,if=virtio" -no-reboot || status=$?
-[[ $status -eq 0 || $status -eq 124 ]]
+[[ $status -eq 0 ]]
 status=0
 timeout 180 qemu-system-x86_64 -machine accel=tcg -m 1024 -nographic \
     -drive "file=$image,format=raw,if=virtio" -no-reboot || status=$?
-[[ $status -eq 0 || $status -eq 124 ]]
+[[ $status -eq 0 ]]
 
 loop=$(losetup --find --show --partscan "$image")
 e2fsck -fn "${loop}p1"

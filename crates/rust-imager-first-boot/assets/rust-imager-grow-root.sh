@@ -8,6 +8,7 @@ WANTS=/etc/systemd/system/multi-user.target.wants/rust-imager-grow-root.service
 SCRIPT=/usr/lib/rust-imager/grow-root.sh
 
 mkdir -p "$STATE_DIR"
+echo "rust-imager grow-root starting"
 phase=partition
 if [ -r "$STATE_FILE" ]; then
     phase=$(cat "$STATE_FILE")
@@ -51,7 +52,7 @@ case "$phase" in
         sync
         printf '%s\n' filesystem > "$STATE_FILE"
         partprobe "$disk" || true
-        systemctl reboot
+        systemctl --no-block reboot
         ;;
     filesystem)
         resize2fs "$root_device"
