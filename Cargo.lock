@@ -1047,6 +1047,7 @@ version = "0.1.0"
 dependencies = [
  "nix",
  "rust-imager-core",
+ "rust-imager-first-boot",
  "serde",
  "serde_json",
  "tempfile",
