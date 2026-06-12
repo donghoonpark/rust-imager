@@ -14,7 +14,9 @@ image="$work/grow-root.img"
 mount_dir="$work/root"
 loop=
 cleanup() {
-    mountpoint -q "$mount_dir" && umount "$mount_dir"
+    if mountpoint -q "$mount_dir"; then
+        umount -R "$mount_dir"
+    fi
     if [[ -n "$loop" ]]; then
         losetup -d "$loop" 2>/dev/null || true
     fi
@@ -34,6 +36,10 @@ mkfs.ext4 -F -L rootfs "${loop}p1"
 mkdir -p "$mount_dir"
 mount "${loop}p1" "$mount_dir"
 debootstrap --variant=minbase bookworm "$mount_dir" http://deb.debian.org/debian
+mount --rbind /dev "$mount_dir/dev"
+mount --make-rslave "$mount_dir/dev"
+mount -t proc proc "$mount_dir/proc"
+mount -t sysfs sys "$mount_dir/sys"
 echo 'root:rust-imager' | chroot "$mount_dir" chpasswd
 printf 'proc /proc proc defaults 0 0\nLABEL=rootfs / ext4 defaults 0 1\n' >"$mount_dir/etc/fstab"
 chroot "$mount_dir" apt-get update
@@ -58,7 +64,7 @@ GRUB
 grub-install --target=i386-pc --boot-directory="$mount_dir/boot" "$loop"
 chroot "$mount_dir" update-grub
 sync
-umount "$mount_dir"
+umount -R "$mount_dir"
 losetup -d "$loop"
 loop=
 
