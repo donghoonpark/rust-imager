@@ -1,0 +1,16 @@
+[package]
+name = "rust-imager-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+crossterm.workspace = true
+ratatui.workspace = true
+rust-imager-core = { path = "../rust-imager-core" }
+thiserror.workspace = true
+
+[lints]
+workspace = true

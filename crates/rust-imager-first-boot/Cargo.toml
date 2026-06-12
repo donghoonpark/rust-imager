@@ -1,0 +1,17 @@
+[package]
+name = "rust-imager-first-boot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rust-imager-core = { path = "../rust-imager-core" }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

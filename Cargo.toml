@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "crates/rust-imager-cli",
+    "crates/rust-imager-core",
+    "crates/rust-imager-first-boot",
+    "crates/rust-imager-linux",
+    "crates/rust-imager-pipeline",
+    "crates/rust-imager-tui",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/donghoonpark/rust-imager"
+rust-version = "1.94"
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+assert_cmd = "2.2.2"
+clap = { version = "4.5.53", features = ["derive"] }
+crossterm = "0.29.0"
+libc = "0.2.178"
+nix = { version = "0.31.3", features = ["fs", "mount", "user"] }
+predicates = "3.1.3"
+proptest = "1.11.0"
+ratatui = "0.29.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+tokio = { version = "1.52.3", features = ["macros", "process", "rt-multi-thread", "signal", "sync"] }
+tracing = "0.1.43"
+tracing-appender = "0.2.4"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+xz2 = "0.1.7"
+zstd = "0.13.3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
