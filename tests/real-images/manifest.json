@@ -1,0 +1,19 @@
+{
+  "images": [
+    {
+      "id": "raspberry-pi-os-lite-arm64-2026-04-21",
+      "family": "raspberry-pi",
+      "distribution": "Raspberry Pi OS Trixie Lite 64-bit",
+      "url": "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-04-21/2026-04-21-raspios-trixie-arm64-lite.img.xz",
+      "archive_sha256": "4cd31df026fd82243805a326dc0cafd7383f7e3d30c9413e7044d507aae281e2",
+      "image_sha256": "7a49cd99423f561e681e9d32071ec05d06beca5a9224972a4a4c99d684deec04"
+    },
+    {
+      "id": "armbian-odroid-n2-ubuntu-26.04-26.5.1",
+      "family": "odroid",
+      "distribution": "Armbian Ubuntu 26.04 minimal for ODROID N2",
+      "url": "https://dl.armbian.com/odroidn2/archive/Armbian_26.5.1_Odroidn2_resolute_current_6.18.33_minimal.img.xz",
+      "archive_sha256": "51309e9e5dec8483ac32a58fdee5615ce5574ad2c9e4b54763de2e596fb8bda1"
+    }
+  ]
+}

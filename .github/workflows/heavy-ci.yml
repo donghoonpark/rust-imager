@@ -1,0 +1,42 @@
+name: Heavy Linux Validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 0"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  block-and-real-images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Install storage test tools
+        run: sudo apt-get update && sudo apt-get install -y dosfstools e2fsprogs fdisk jq shellcheck xz-utils
+      - run: cargo test --workspace --all-features
+      - run: shellcheck tests/**/*.sh crates/rust-imager-first-boot/assets/*.sh
+      - run: tests/fixtures/generate.sh
+      - run: sudo tests/integration/fault-injection.sh
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/rust-imager/images
+          key: real-sbc-images-v1-${{ hashFiles('tests/real-images/manifest.json') }}
+      - run: tests/real-images/verify.sh
+
+  qemu-grow-root:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU image builder
+        run: sudo apt-get update && sudo apt-get install -y debootstrap e2fsprogs fdisk grub-pc-bin jq qemu-system-x86
+      - run: sudo tests/qemu/run-grow-root.sh
