@@ -38,7 +38,9 @@ jq -c '.images[]' "$manifest" | while read -r entry; do
     output="$work/output"
     loop=
     cleanup() {
-        [[ -n "$loop" ]] && sudo losetup -d "$loop" 2>/dev/null || true
+        if [[ -n "$loop" ]]; then
+            sudo losetup -d "$loop" 2>/dev/null || true
+        fi
         rm -rf "$work"
     }
     trap cleanup EXIT

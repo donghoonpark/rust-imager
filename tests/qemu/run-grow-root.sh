@@ -15,7 +15,9 @@ mount_dir="$work/root"
 loop=
 cleanup() {
     mountpoint -q "$mount_dir" && umount "$mount_dir"
-    [[ -n "$loop" ]] && losetup -d "$loop" 2>/dev/null || true
+    if [[ -n "$loop" ]]; then
+        losetup -d "$loop" 2>/dev/null || true
+    fi
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -35,7 +37,8 @@ debootstrap --variant=minbase bookworm "$mount_dir" http://deb.debian.org/debian
 echo 'root:rust-imager' | chroot "$mount_dir" chpasswd
 printf 'proc /proc proc defaults 0 0\nLABEL=rootfs / ext4 defaults 0 1\n' >"$mount_dir/etc/fstab"
 chroot "$mount_dir" apt-get update
-chroot "$mount_dir" apt-get install -y linux-image-amd64 systemd-sysv initramfs-tools
+chroot "$mount_dir" apt-get install -y \
+    fdisk grub2-common initramfs-tools linux-image-amd64 systemd-sysv
 mkdir -p "$mount_dir/usr/lib/rust-imager" \
     "$mount_dir/etc/systemd/system/multi-user.target.wants"
 install -m 0755 crates/rust-imager-first-boot/assets/rust-imager-grow-root.sh \
@@ -60,12 +63,14 @@ losetup -d "$loop"
 loop=
 
 truncate -s 2200M "$image"
+status=0
 timeout 180 qemu-system-x86_64 -machine accel=tcg -m 1024 -nographic \
     -drive "file=$image,format=raw,if=virtio" -no-reboot || status=$?
-[[ ${status:-0} -eq 0 || ${status:-0} -eq 124 ]]
+[[ $status -eq 0 || $status -eq 124 ]]
+status=0
 timeout 180 qemu-system-x86_64 -machine accel=tcg -m 1024 -nographic \
     -drive "file=$image,format=raw,if=virtio" -no-reboot || status=$?
-[[ ${status:-0} -eq 0 || ${status:-0} -eq 124 ]]
+[[ $status -eq 0 || $status -eq 124 ]]
 
 loop=$(losetup --find --show --partscan "$image")
 e2fsck -fn "${loop}p1"

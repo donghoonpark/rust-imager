@@ -1,13 +1,14 @@
 [advisories]
 yanked = "deny"
+ignore = [
+    # Transitive through ratatui 0.29; no safe compatible upgrade is available.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 confidence-threshold = 0.8
 allow = [
     "Apache-2.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "ISC",
     "MIT",
     "Unicode-3.0",
     "Zlib",
