@@ -41,7 +41,7 @@ jq -c '.images[]' "$manifest" | while read -r entry; do
         if [[ -n "$loop" ]]; then
             sudo losetup -d "$loop" 2>/dev/null || true
         fi
-        rm -rf "$work"
+        sudo rm -rf "$work"
     }
     trap cleanup EXIT
     cp --reflink=auto --sparse=always "$image" "$test_image"
@@ -54,7 +54,7 @@ jq -c '.images[]' "$manifest" | while read -r entry; do
         "$test_binary" --ignored --nocapture
     sudo losetup -d "$loop"
     loop=
-    rm -rf "$work"
+    sudo rm -rf "$work"
     trap - EXIT
     echo "fully validated real image: $id"
 done
