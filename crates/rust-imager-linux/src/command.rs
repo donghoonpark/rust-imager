@@ -1,7 +1,8 @@
 //! Shell-free process execution.
 
 use std::ffi::OsString;
-use std::process::{Command, Output};
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 use thiserror::Error;
 
@@ -12,24 +13,45 @@ pub struct CommandSpec {
     pub program: OsString,
     /// Exact argument vector.
     pub args: Vec<OsString>,
+    /// Optional bytes supplied to standard input.
+    pub stdin: Option<Vec<u8>>,
 }
 
 impl CommandSpec {
-    /// Construct a command specification.
+    /// Construct a command specification without standard input.
     pub fn new(program: impl Into<OsString>, args: impl IntoIterator<Item = OsString>) -> Self {
         Self {
             program: program.into(),
             args: args.into_iter().collect(),
+            stdin: None,
         }
     }
+
+    /// Attach exact standard input bytes.
+    #[must_use]
+    pub fn with_stdin(mut self, stdin: impl Into<Vec<u8>>) -> Self {
+        self.stdin = Some(stdin.into());
+        self
+    }
+}
+
+/// Captured successful command output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandResult {
+    /// Numeric exit status.
+    pub status: i32,
+    /// UTF-8-lossy standard output.
+    pub stdout: String,
+    /// UTF-8-lossy standard error.
+    pub stderr: String,
 }
 
 /// Process execution failure.
 #[derive(Debug, Error)]
 pub enum CommandError {
-    /// The process could not be started.
+    /// The process could not be started or communicated with.
     #[error("failed to execute {program:?}: {source}")]
-    Spawn {
+    Io {
         /// Program that failed.
         program: OsString,
         /// Operating system error.
@@ -47,28 +69,72 @@ pub enum CommandError {
     },
 }
 
-/// Execute a command directly, with a deterministic locale.
-///
-/// # Errors
-///
-/// Returns [`CommandError`] when spawning fails or the process exits with a
-/// non-zero status.
-pub fn run(spec: &CommandSpec) -> Result<Output, CommandError> {
-    let output = Command::new(&spec.program)
-        .args(&spec.args)
-        .env("LC_ALL", "C")
-        .output()
-        .map_err(|source| CommandError::Spawn {
-            program: spec.program.clone(),
-            source,
-        })?;
-    if output.status.success() {
-        Ok(output)
-    } else {
-        Err(CommandError::Failed {
-            program: spec.program.clone(),
-            status: output.status.code().unwrap_or(-1),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        })
+/// Replaceable command executor.
+pub trait Runner: Send + Sync {
+    /// Execute one exact command.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] for process or exit-status failures.
+    fn run(&self, spec: &CommandSpec) -> Result<CommandResult, CommandError>;
+}
+
+/// Real operating-system command runner.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ProcessRunner;
+
+impl Runner for ProcessRunner {
+    fn run(&self, spec: &CommandSpec) -> Result<CommandResult, CommandError> {
+        let mut child = Command::new(&spec.program)
+            .args(&spec.args)
+            .env("LC_ALL", "C")
+            .stdin(if spec.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|source| CommandError::Io {
+                program: spec.program.clone(),
+                source,
+            })?;
+        if let Some(input) = &spec.stdin {
+            child
+                .stdin
+                .take()
+                .ok_or_else(|| CommandError::Io {
+                    program: spec.program.clone(),
+                    source: std::io::Error::other("stdin pipe unavailable"),
+                })?
+                .write_all(input)
+                .map_err(|source| CommandError::Io {
+                    program: spec.program.clone(),
+                    source,
+                })?;
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|source| CommandError::Io {
+                program: spec.program.clone(),
+                source,
+            })?;
+        let status = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        if output.status.success() {
+            Ok(CommandResult {
+                status,
+                stdout,
+                stderr,
+            })
+        } else {
+            Err(CommandError::Failed {
+                program: spec.program.clone(),
+                status,
+                stderr,
+            })
+        }
     }
 }
