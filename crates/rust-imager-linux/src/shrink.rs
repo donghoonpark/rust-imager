@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::command::Runner;
+use crate::quiescence::{quiesce_disk, sysfs_holders};
 use crate::tools::{E2fsTools, MountTools, PartitionTools};
 
 /// Inputs required by the destructive shrink transaction.
@@ -123,7 +124,9 @@ impl ShrinkBackend for LinuxShrinkBackend<'_> {
         let mount = MountTools::new(self.runner);
         let partition = PartitionTools::new(self.runner);
         match stage {
-            ShrinkStage::Unmount | ShrinkStage::UnmountAfterInstall => mount
+            ShrinkStage::Unmount => quiesce_disk(self.runner, &request.disk, sysfs_holders)
+                .map_err(|error| error.to_string()),
+            ShrinkStage::UnmountAfterInstall => mount
                 .unmount(&request.root_partition)
                 .map(|_| ())
                 .map_err(|error| error.to_string()),
