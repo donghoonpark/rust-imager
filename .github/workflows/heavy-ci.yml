@@ -40,3 +40,16 @@ jobs:
       - name: Install QEMU image builder
         run: sudo apt-get update && sudo apt-get install -y debootstrap e2fsprogs fdisk grub-pc-bin jq qemu-system-x86
       - run: sudo tests/qemu/run-grow-root.sh
+
+  ubuntu-qemu-grow-root:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Ubuntu QEMU image tools
+        run: sudo apt-get update && sudo apt-get install -y curl dosfstools e2fsprogs fdisk grub-pc-bin jq qemu-system-x86 xz-utils zstd
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/rust-imager/ubuntu
+          key: ubuntu-noble-rootfs-20250805
+      - run: sudo env RUST_IMAGER_IMAGE_CACHE="$HOME/.cache/rust-imager/ubuntu" tests/qemu/run-ubuntu-grow-root.sh

@@ -145,6 +145,11 @@ integrity, preservation of the first partition, and service cleanup.
 An ARM64 `virt` job may be added when its runtime remains practical. It validates
 generic ARM64 Linux/systemd behavior, not Raspberry Pi or ODROID firmware.
 
+An additional job uses the checksum-pinned official Ubuntu 24.04 Noble root
+filesystem in a DOS/MBR FAT+ext4 image. The compact image is compressed,
+restored into a larger disk, and booted twice to validate the real Ubuntu
+kernel, systemd, and userspace combination without cloud-init grow helpers.
+
 ## 6. Real Image Validation
 
 Pinned Raspberry Pi OS and ODROID images continue to be:

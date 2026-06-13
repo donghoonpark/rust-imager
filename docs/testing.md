@@ -55,6 +55,13 @@ and payload integrity.
 QEMU validates generic Linux/systemd behavior. Raspberry Pi and ODROID boot ROM,
 firmware, and USB eMMC bridge behavior still require real hardware acceptance.
 
+The heavy workflow also downloads the checksum-pinned official Ubuntu 24.04
+Noble root filesystem, installs it into a DOS/MBR FAT+ext4 disk, compresses and
+restores that compact disk into a larger image, and boots the restored Ubuntu
+system twice. It verifies root growth, first-partition preservation, payload
+integrity, and one-shot cleanup using Ubuntu's real kernel, systemd, and storage
+utilities.
+
 ## CI
 
 - `ci.yml`: format, Clippy, unit/integration-safe tests, dependency advisories
