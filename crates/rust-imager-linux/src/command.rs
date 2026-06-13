@@ -130,13 +130,12 @@ impl Runner for ProcessRunner {
     fn run(&self, spec: &CommandSpec) -> Result<CommandResult, CommandError> {
         #[cfg(target_os = "linux")]
         let mut command = {
-            let milliseconds = spec.timeout.as_millis().max(1);
             let mut command = Command::new("setsid");
             command.args([
                 OsString::from("timeout"),
                 OsString::from("--signal=TERM"),
                 OsString::from("--kill-after=10s"),
-                OsString::from(format!("{milliseconds}ms")),
+                OsString::from(gnu_timeout_duration(spec.timeout)),
                 spec.program.clone(),
             ]);
             command.args(&spec.args);
@@ -208,5 +207,26 @@ impl Runner for ProcessRunner {
                 stderr,
             })
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn gnu_timeout_duration(duration: Duration) -> String {
+    let milliseconds = duration.as_millis().max(1);
+    let seconds = milliseconds / 1_000;
+    let fractional = milliseconds % 1_000;
+    format!("{seconds}.{fractional:03}s")
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::gnu_timeout_duration;
+    use std::time::Duration;
+
+    #[test]
+    fn formats_gnu_timeout_fractional_seconds() {
+        assert_eq!(gnu_timeout_duration(Duration::from_millis(50)), "0.050s");
+        assert_eq!(gnu_timeout_duration(Duration::from_millis(1_250)), "1.250s");
+        assert_eq!(gnu_timeout_duration(Duration::ZERO), "0.001s");
     }
 }

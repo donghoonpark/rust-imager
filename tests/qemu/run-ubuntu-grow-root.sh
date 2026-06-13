@@ -64,6 +64,7 @@ mount --rbind /dev "$mount_dir/dev"
 mount --make-rslave "$mount_dir/dev"
 mount -t proc proc "$mount_dir/proc"
 mount -t sysfs sys "$mount_dir/sys"
+rm -f "$mount_dir/etc/resolv.conf"
 cp /etc/resolv.conf "$mount_dir/etc/resolv.conf"
 printf 'proc /proc proc defaults 0 0\nLABEL=rootfs / ext4 defaults 0 1\n' >"$mount_dir/etc/fstab"
 chroot "$mount_dir" apt-get update
