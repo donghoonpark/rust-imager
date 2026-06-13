@@ -26,6 +26,9 @@ fn throughput(c: &mut Criterion) {
     group.bench_function("zstd-3", |bencher| {
         let output = dir.path().join("image.img.zst");
         bencher.iter(|| {
+            if output.exists() {
+                fs::remove_file(&output).expect("remove previous benchmark output");
+            }
             extract_path(
                 &source,
                 &output,

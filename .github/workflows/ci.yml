@@ -19,4 +19,5 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features
+      - run: cargo bench -p rust-imager-pipeline --bench throughput -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2
       - uses: EmbarkStudios/cargo-deny-action@v2

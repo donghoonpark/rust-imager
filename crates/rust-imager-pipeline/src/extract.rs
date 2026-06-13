@@ -27,6 +27,14 @@ pub struct ExtractOptions {
     pub queue_depth: usize,
 }
 
+impl ExtractOptions {
+    /// Maximum bytes held by queued reader buffers.
+    #[must_use]
+    pub fn queued_input_capacity(self) -> Option<usize> {
+        self.buffer_bytes.checked_mul(self.queue_depth)
+    }
+}
+
 /// Successful extraction statistics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractResult {
@@ -97,6 +105,9 @@ pub fn extract_path(
     mut on_progress: impl FnMut(Progress),
 ) -> Result<ExtractResult, ExtractError> {
     if options.bytes == 0 || options.buffer_bytes == 0 || options.queue_depth == 0 {
+        return Err(ExtractError::InvalidOptions);
+    }
+    if options.queued_input_capacity().is_none() {
         return Err(ExtractError::InvalidOptions);
     }
     let partial = partial_path(output);

@@ -22,6 +22,11 @@ The default pipeline has four queued 1 MiB input buffers. Reader-side queued
 memory is therefore capped at approximately 4 MiB, plus one active encoder
 buffer and library state. It does not scale with eMMC capacity.
 
+`memory_bound.rs` verifies the checked queue-capacity calculation remains
+independent of source size. The Criterion benchmark removes its prior output on
+every iteration so overwrite protection remains enabled in production code
+without making repeated measurements fail.
+
 ## Linux Device Measurement
 
 For USB 2.0 validation:
