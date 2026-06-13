@@ -85,6 +85,36 @@ fn shrinks_extracts_and_verifies_real_sbc_image() -> Result<(), Box<dyn std::err
         "e2fsck",
         [OsString::from("-fn"), OsString::from(&root_path)],
     ))?;
+    let asset_mount = output.join("first-boot-assets");
+    std::fs::create_dir_all(&asset_mount)?;
+    runner.run(&rust_imager_linux::command::CommandSpec::new(
+        "mount",
+        [
+            OsString::from("-o"),
+            OsString::from("ro,noload"),
+            OsString::from(&root_path),
+            asset_mount.as_os_str().to_os_string(),
+        ],
+    ))?;
+    assert!(
+        asset_mount
+            .join("usr/lib/rust-imager/grow-root.sh")
+            .is_file()
+    );
+    assert!(
+        asset_mount
+            .join("etc/systemd/system/rust-imager-grow-root.service")
+            .is_file()
+    );
+    assert!(
+        asset_mount
+            .join("etc/systemd/system/multi-user.target.wants/rust-imager-grow-root.service")
+            .exists()
+    );
+    runner.run(&rust_imager_linux::command::CommandSpec::new(
+        "umount",
+        [asset_mount.as_os_str().to_os_string()],
+    ))?;
 
     for compression in [
         Compression::Zstandard { level: 1 },
