@@ -102,6 +102,12 @@ Privileged Linux, real-image, fault-injection, and QEMU validation are
 documented in [docs/testing.md](docs/testing.md). Performance measurement is in
 [docs/performance.md](docs/performance.md).
 
+Automated validation includes pinned Raspberry Pi OS and ODROID images, a full
+loop-backed CLI transaction, injected read/output failures, generic Debian
+first-boot expansion, and a restored Ubuntu 24.04 FAT+ext4 image booted twice in
+QEMU. Physical USB bridge behavior and vendor-board firmware boot remain
+hardware acceptance requirements.
+
 ## License
 
 MIT

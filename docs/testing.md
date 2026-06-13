@@ -18,12 +18,19 @@ atomic outputs, all verification levels, metadata, and TUI reducers.
 
 ```bash
 tests/fixtures/generate.sh
+sudo tests/integration/quiescence.sh
 sudo tests/integration/fault-injection.sh
+sudo tests/integration/full-engine.sh
 ```
 
 The fixture generator creates an MBR/FAT/ext4 image through a loop device.
-Fault injection uses device-mapper to prove that permanent read errors are
-observable rather than silently replaced.
+The quiescence test mounts both FAT and ext4 partitions and proves production
+code unmounts the complete disk. The full-engine test exposes a loop disk
+through a CI-only `/dev/sdX` facade and runs the real CLI through filesystem
+inspection, first-boot installation, shrink, MBR rewrite, compression, reread
+verification, logging, and metadata generation. Fault injection uses
+device-mapper and a constrained tmpfs to verify production extraction retains
+partial artifacts after source read errors and output `ENOSPC`.
 
 ## Real Images
 
@@ -61,6 +68,16 @@ restores that compact disk into a larger image, and boots the restored Ubuntu
 system twice. It verifies root growth, first-partition preservation, payload
 integrity, and one-shot cleanup using Ubuntu's real kernel, systemd, and storage
 utilities.
+
+## Physical Acceptance Remaining
+
+Automation cannot establish:
+
+- board ROM and vendor firmware boot from a restored image
+- behavior of representative USB eMMC bridges during reset or disconnect
+- eMMC bad-block, wear, and sudden-power-loss behavior
+- sustained USB 2.0 throughput on physical host controllers
+- eMMC boot0/boot1 areas not exposed in the user-data disk address space
 
 ## CI
 

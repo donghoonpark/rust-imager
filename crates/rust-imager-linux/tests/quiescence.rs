@@ -62,7 +62,7 @@ fn unmounts_every_child_deepest_first() {
     let calls = runner.calls.lock().expect("lock");
     let unmounts: Vec<_> = calls
         .iter()
-        .filter(|call| call.program == OsString::from("umount"))
+        .filter(|call| call.program == "umount")
         .map(|call| call.args.clone())
         .collect();
     assert_eq!(
@@ -97,7 +97,11 @@ fn rejects_kernel_holders() {
     };
     assert!(matches!(
         quiesce_disk(&runner, "/dev/sda", |name| {
-            Ok((name == "sda2").then(|| vec!["dm-0".into()]).unwrap_or_default())
+            Ok(if name == "sda2" {
+                vec!["dm-0".into()]
+            } else {
+                Vec::new()
+            })
         }),
         Err(QuiescenceError::Holders { device, holders })
             if device == "/dev/sda2" && holders == vec!["dm-0"]

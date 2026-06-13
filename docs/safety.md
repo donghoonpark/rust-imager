@@ -16,6 +16,10 @@ The program does not attempt automatic rollback after a failed destructive
 stage. Reversing a partially completed filesystem/partition change without
 knowing the exact completed operation can cause further damage.
 
+Storage commands run in an isolated session with finite timeouts. Ordinary
+SIGINT and SIGTERM are deferred while mutation is active. This does not protect
+against SIGKILL, power loss, kernel failure, USB disconnects, or bridge resets.
+
 ## Device Selection
 
 Only whole USB disks matching `/dev/sd[a-z]+` are considered. The running
@@ -25,6 +29,11 @@ logical sector size, and transport are captured and re-read before mutation.
 Version 0.1 accepts only 512-byte logical-sector devices; 4Kn devices are
 rejected until their DOS/GPT detection and resize behavior have a dedicated
 validation matrix.
+
+Before mutation, every mounted child partition is unmounted and the disk is
+rejected if active swap, kernel holders, or remaining mounts are detected.
+Output paths are resolved through their canonical parent before the backing
+filesystem's disk is excluded.
 
 The exact model string must be typed before proceeding. Unknown but structurally
 compatible layouts display a strong warning. Profile detection is a heuristic;
