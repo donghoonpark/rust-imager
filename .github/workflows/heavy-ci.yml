@@ -25,6 +25,7 @@ jobs:
       - run: cargo test --workspace --all-features
       - run: shellcheck tests/**/*.sh crates/rust-imager-first-boot/assets/*.sh
       - run: tests/fixtures/generate.sh
+      - run: sudo tests/integration/quiescence.sh
       - run: sudo tests/integration/fault-injection.sh
       - uses: actions/cache@v4
         with:
