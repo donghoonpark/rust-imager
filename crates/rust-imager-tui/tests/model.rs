@@ -2,8 +2,9 @@
 
 use ratatui::{Terminal, backend::TestBackend};
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_tui::model::{Action, AppModel, Screen};
+use rust_imager_tui::model::{Action, AppModel, OperationPhase, Screen};
 use rust_imager_tui::view::draw;
+use std::time::{Duration, Instant};
 
 fn device() -> DeviceIdentity {
     DeviceIdentity {
@@ -49,4 +50,74 @@ fn retains_unknown_layout_warning_on_confirmation_screen() {
     model.reduce(Action::SetUnknownLayoutWarning(true));
     assert_eq!(model.screen, Screen::ConfirmDevice);
     assert!(model.unknown_layout_warning);
+}
+
+#[test]
+fn tracks_operation_phases_and_recent_events() {
+    let start = Instant::now();
+    let mut model = AppModel::new(Vec::new());
+    model.reduce_at(Action::PreparationStarted, start);
+    assert_eq!(model.operation_phase(), Some(OperationPhase::Inspect));
+
+    model.reduce_at(Action::MutationStarted, start + Duration::from_secs(2));
+    model.reduce_at(Action::ExtractionStarted, start + Duration::from_secs(4));
+    model.reduce_at(Action::VerificationStarted, start + Duration::from_secs(6));
+    model.reduce_at(Action::Finished, start + Duration::from_secs(8));
+
+    assert_eq!(model.operation_phase(), Some(OperationPhase::Complete));
+    assert_eq!(model.elapsed(), Duration::from_secs(8));
+    assert!(model.recent_events().len() <= 8);
+    assert!(
+        model
+            .recent_events()
+            .iter()
+            .any(|event| event.message.contains("complete"))
+    );
+}
+
+#[test]
+fn computes_progress_speed_and_eta_from_timed_samples() {
+    let start = Instant::now();
+    let mut model = AppModel::new(Vec::new());
+    model.reduce_at(Action::ExtractionStarted, start);
+    model.reduce_at(
+        Action::Progress {
+            bytes: 1_000,
+            total: 10_000,
+        },
+        start + Duration::from_secs(1),
+    );
+    model.reduce_at(
+        Action::Progress {
+            bytes: 5_000,
+            total: 10_000,
+        },
+        start + Duration::from_secs(5),
+    );
+
+    let metrics = model.progress_metrics();
+    assert_eq!(metrics.bytes, 5_000);
+    assert_eq!(metrics.total, 10_000);
+    assert_eq!(metrics.average_bytes_per_second, 1_000);
+    assert_eq!(metrics.recent_bytes_per_second, 1_000);
+    assert_eq!(metrics.eta, Some(Duration::from_secs(5)));
+}
+
+#[test]
+fn clamps_progress_and_bounds_event_history() {
+    let start = Instant::now();
+    let mut model = AppModel::new(Vec::new());
+    model.reduce_at(Action::ExtractionStarted, start);
+    for index in 0..20 {
+        model.reduce_at(
+            Action::Progress {
+                bytes: 100 + index,
+                total: 100,
+            },
+            start + Duration::from_secs(index + 1),
+        );
+    }
+
+    assert_eq!(model.progress_metrics().bytes, 100);
+    assert!(model.recent_events().len() <= 8);
 }
