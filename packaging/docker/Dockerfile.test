@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+ARG UBUNTU_VERSION
+FROM ubuntu:${UBUNTU_VERSION}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG EXPECTED_VERSION
+ARG EXPECTED_ARCH
+
+COPY rust-imager.deb /tmp/rust-imager.deb
+COPY test-package.sh /tmp/test-package.sh
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        e2fsprogs \
+        fdisk \
+        mount \
+        parted \
+        util-linux \
+    && dpkg -i /tmp/rust-imager.deb \
+    && chmod 0755 /tmp/test-package.sh \
+    && /tmp/test-package.sh "$EXPECTED_VERSION" "$EXPECTED_ARCH" \
+    && rm -rf /var/lib/apt/lists/* /tmp/rust-imager.deb

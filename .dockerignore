@@ -1,0 +1,6 @@
+.git
+.worktrees
+dist
+target
+*.log
+*.partial
