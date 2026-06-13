@@ -37,6 +37,9 @@ grep -Fq "contents: read" "$workflow" || fail "read-only default permissions mis
 grep -Fq "contents: write" "$workflow" || fail "publish permission missing"
 grep -Fq "amd64" "$workflow" || fail "amd64 build missing"
 grep -Fq "arm64" "$workflow" || fail "arm64 build missing"
+grep -Fq "ubuntu-24.04-arm" "$workflow" || fail "native arm64 runner missing"
+grep -Fq "runs-on: \${{ matrix.runner }}" "$workflow" ||
+    fail "architecture jobs do not select native runners"
 for version in 18.04 20.04 22.04 24.04 26.04; do
     grep -Fq "$version" "$workflow" || fail "Ubuntu $version compatibility job missing"
 done

@@ -111,12 +111,11 @@ The workflow has four phases:
 4. **Publish:** after every matrix job passes, generate `SHA256SUMS` and create
    or update the tag's GitHub Release with the two packages and checksum file.
 
-The workflow runs on an `ubuntu-24.04` `amd64` GitHub-hosted runner. It executes
-the `amd64` build natively inside an Ubuntu 18.04 container and executes the
-`arm64` build inside an Ubuntu 18.04 container through Docker Buildx and QEMU
-user-mode emulation. Compatibility tests use the same native-or-emulated
-execution rule. Tests must execute binaries under their matching architecture
-rather than only inspecting package metadata.
+The workflow uses `ubuntu-24.04` for `amd64` and `ubuntu-24.04-arm` for `arm64`.
+Each native GitHub-hosted runner executes the build inside an architecture-
+matching Ubuntu 18.04 container through Docker Buildx. Compatibility tests use
+the same native runner mapping. Tests must execute binaries under their
+matching architecture rather than only inspecting package metadata.
 
 Manual runs execute validation, build, and compatibility testing and retain the
 packages as Actions artifacts. They never create a GitHub Release.
