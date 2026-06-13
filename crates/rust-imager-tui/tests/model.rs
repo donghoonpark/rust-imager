@@ -121,3 +121,35 @@ fn clamps_progress_and_bounds_event_history() {
     assert_eq!(model.progress_metrics().bytes, 100);
     assert!(model.recent_events().len() <= 8);
 }
+
+#[test]
+fn moves_device_cursor_without_confirming_selection() {
+    let mut second = device();
+    second.path = "/dev/sdb".into();
+    let mut model = AppModel::new(vec![device(), second]);
+
+    assert_eq!(model.device_cursor, 0);
+    model.reduce(Action::MoveDeviceCursor(1));
+    assert_eq!(model.device_cursor, 1);
+    assert_eq!(model.selected, None);
+
+    model.reduce(Action::MoveDeviceCursor(1));
+    assert_eq!(model.device_cursor, 0);
+    model.reduce(Action::MoveDeviceCursor(-1));
+    assert_eq!(model.device_cursor, 1);
+}
+
+#[test]
+fn ticks_elapsed_time_without_dismissing_failure() {
+    let start = Instant::now();
+    let mut model = AppModel::new(Vec::new());
+    model.reduce_at(Action::PreparationStarted, start);
+    model.reduce_at(
+        Action::Failed("USB device disconnected".into()),
+        start + Duration::from_secs(1),
+    );
+    model.reduce_at(Action::Tick, start + Duration::from_secs(5));
+
+    assert_eq!(model.elapsed(), Duration::from_secs(5));
+    assert_eq!(model.error.as_deref(), Some("USB device disconnected"));
+}

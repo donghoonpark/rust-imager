@@ -1,9 +1,11 @@
 //! Interactive terminal wizard.
 
 use std::io::{self, stdout};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
 use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -19,6 +21,11 @@ use rust_imager_tui::view::draw;
 
 use crate::app::{EngineEvent, ImageRequest};
 
+enum WorkerMessage {
+    Event(EngineEvent),
+    Finished(Result<(), String>),
+}
+
 /// Run the keyboard-only setup wizard.
 pub fn run(devices: Vec<DeviceIdentity>) -> Result<ImageRequest> {
     if devices.is_empty() {
@@ -31,41 +38,62 @@ pub fn run(devices: Vec<DeviceIdentity>) -> Result<ImageRequest> {
 pub fn run_operation(request: &ImageRequest) -> Result<()> {
     with_terminal(|terminal| {
         let mut model = AppModel::new(Vec::new());
+        model.operation_source = Some(request.device.clone());
         model.output = request.output.to_string_lossy().into_owned();
         model.compression = request.compression;
         model.verification = request.verification;
         model.reduce(Action::PreparationStarted);
         terminal.draw(|frame| draw(frame, &model))?;
 
-        let mut draw_error = None;
-        let result = crate::app::run_image_with_progress(request, |event| {
-            match event {
-                EngineEvent::Preparing => model.reduce(Action::PreparationStarted),
-                EngineEvent::WarningUnknownLayout => {
-                    model.reduce(Action::SetUnknownLayoutWarning(true));
-                }
-                EngineEvent::Mutating => model.reduce(Action::MutationStarted),
-                EngineEvent::Extracting { bytes, total } => {
-                    model.reduce(Action::ExtractionStarted);
-                    model.reduce(Action::Progress { bytes, total });
-                }
-                EngineEvent::Verifying => model.reduce(Action::VerificationStarted),
-                EngineEvent::Complete => model.reduce(Action::Finished),
-            }
-            if let Err(error) = terminal.draw(|frame| draw(frame, &model)) {
-                draw_error = Some(error);
-            }
+        let (sender, receiver) = mpsc::channel();
+        let worker_request = request.clone();
+        let worker = thread::spawn(move || {
+            let events = sender.clone();
+            let result = crate::app::run_image_with_progress(&worker_request, move |event| {
+                let _ = events.send(WorkerMessage::Event(event));
+            })
+            .map_err(|error| format!("{error:#}"));
+            let _ = sender.send(WorkerMessage::Finished(result));
         });
-        if let Some(error) = draw_error {
-            return Err(error.into());
-        }
-        if let Err(error) = result {
-            model.reduce(Action::Failed(format!("{error:#}")));
+
+        let operation_result = loop {
+            match receiver.recv_timeout(Duration::from_millis(100)) {
+                Ok(WorkerMessage::Event(event)) => apply_engine_event(&mut model, event),
+                Ok(WorkerMessage::Finished(result)) => break result,
+                Err(RecvTimeoutError::Timeout) => model.reduce(Action::Tick),
+                Err(RecvTimeoutError::Disconnected) => {
+                    break Err("imaging worker disconnected unexpectedly".into());
+                }
+            }
             terminal.draw(|frame| draw(frame, &model))?;
-            return Err(error);
+        };
+        worker
+            .join()
+            .map_err(|_| anyhow!("imaging worker panicked"))?;
+
+        if let Err(message) = &operation_result {
+            model.reduce(Action::Failed(message.clone()));
+            terminal.draw(|frame| draw(frame, &model))?;
         }
-        wait_for_acknowledgement(terminal)
+        wait_for_acknowledgement(terminal)?;
+        operation_result.map_err(anyhow::Error::msg)
     })
+}
+
+fn apply_engine_event(model: &mut AppModel, event: EngineEvent) {
+    match event {
+        EngineEvent::Preparing => model.reduce(Action::PreparationStarted),
+        EngineEvent::WarningUnknownLayout => {
+            model.reduce(Action::SetUnknownLayoutWarning(true));
+        }
+        EngineEvent::Mutating => model.reduce(Action::MutationStarted),
+        EngineEvent::Extracting { bytes, total } => {
+            model.reduce(Action::ExtractionStarted);
+            model.reduce(Action::Progress { bytes, total });
+        }
+        EngineEvent::Verifying => model.reduce(Action::VerificationStarted),
+        EngineEvent::Complete => model.reduce(Action::Finished),
+    }
 }
 
 fn with_terminal<T>(
@@ -114,26 +142,25 @@ fn event_loop(
             bail!("cancelled before mutation");
         }
         match model.screen {
-            Screen::DeviceSelection => {
-                if let KeyCode::Char(value @ '1'..='9') = key.code {
+            Screen::DeviceSelection => match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    model.reduce(Action::MoveDeviceCursor(-1));
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    model.reduce(Action::MoveDeviceCursor(1));
+                }
+                KeyCode::Enter => {
+                    let index = model.device_cursor;
+                    select_device(&mut model, index);
+                }
+                KeyCode::Char(value @ '1'..='9') => {
                     let index = usize::try_from(value.to_digit(10).unwrap_or(0))
                         .unwrap_or(0)
                         .saturating_sub(1);
-                    let Some(device) = model.devices.get(index).cloned() else {
-                        model.reduce(Action::Failed("Invalid device selection".into()));
-                        continue;
-                    };
-                    match crate::app::analyze_layout(&device) {
-                        Ok(layout) => {
-                            model.reduce(Action::SelectDevice(index));
-                            model.reduce(Action::SetUnknownLayoutWarning(
-                                layout == LayoutClass::WarningUnknown,
-                            ));
-                        }
-                        Err(error) => model.reduce(Action::Failed(format!("{error:#}"))),
-                    }
+                    select_device(&mut model, index);
                 }
-            }
+                _ => {}
+            },
             Screen::ConfirmDevice => match key.code {
                 KeyCode::Char(value) => model.confirmation.push(value),
                 KeyCode::Backspace => {
@@ -186,5 +213,21 @@ fn event_loop(
             }
             _ => {}
         }
+    }
+}
+
+fn select_device(model: &mut AppModel, index: usize) {
+    let Some(device) = model.devices.get(index).cloned() else {
+        model.reduce(Action::Failed("Invalid device selection".into()));
+        return;
+    };
+    match crate::app::analyze_layout(&device) {
+        Ok(layout) => {
+            model.reduce(Action::SelectDevice(index));
+            model.reduce(Action::SetUnknownLayoutWarning(
+                layout == LayoutClass::WarningUnknown,
+            ));
+        }
+        Err(error) => model.reduce(Action::Failed(format!("{error:#}"))),
     }
 }

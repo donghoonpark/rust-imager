@@ -117,9 +117,15 @@ fn render_header(frame: &mut Frame<'_>, area: Rect, model: &AppModel, density: D
     let phase = model
         .operation_phase()
         .map_or_else(|| screen_name(model.screen), phase_name);
-    let device = model
-        .selected_device()
-        .map_or("No device selected", |value| value.model.as_str());
+    let device = model.selected_device().map_or_else(
+        || {
+            model
+                .operation_source
+                .as_deref()
+                .unwrap_or("No device selected")
+        },
+        |value| value.model.as_str(),
+    );
     let text = match density {
         Density::Wide => vec![
             Line::from(Span::styled(
@@ -245,7 +251,7 @@ fn render_device_selection(frame: &mut Frame<'_>, area: Rect, model: &AppModel) 
             .iter()
             .enumerate()
             .map(|(index, device)| {
-                let marker = if model.selected == Some(index) {
+                let marker = if model.device_cursor == index {
                     ">"
                 } else {
                     " "

@@ -82,6 +82,8 @@ pub enum Screen {
 /// User or engine action applied to the model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
+    /// Move the device cursor, wrapping at list boundaries.
+    MoveDeviceCursor(i8),
     /// Select a candidate by index.
     SelectDevice(usize),
     /// Replace typed confirmation.
@@ -115,6 +117,8 @@ pub enum Action {
     Failed(String),
     /// Record whether the selected layout needs a strong warning.
     SetUnknownLayoutWarning(bool),
+    /// Advance wall-clock metrics without changing state.
+    Tick,
 }
 
 /// Complete serializable-independent UI state.
@@ -126,6 +130,10 @@ pub struct AppModel {
     pub devices: Vec<DeviceIdentity>,
     /// Selected candidate index.
     pub selected: Option<usize>,
+    /// Highlighted candidate index.
+    pub device_cursor: usize,
+    /// Source path retained while the operation dashboard is running.
+    pub operation_source: Option<String>,
     /// Typed model confirmation.
     pub confirmation: String,
     /// Final output path.
@@ -158,6 +166,8 @@ impl AppModel {
             screen: Screen::DeviceSelection,
             devices,
             selected: None,
+            device_cursor: 0,
+            operation_source: None,
             confirmation: String::new(),
             output: String::new(),
             compression: Compression::Zstandard { level: 3 },
@@ -182,11 +192,15 @@ impl AppModel {
 
     /// Apply one action at a supplied instant.
     pub fn reduce_at(&mut self, action: Action, now: Instant) {
-        self.error = None;
+        if !matches!(action, Action::Tick) {
+            self.error = None;
+        }
         self.updated_at = Some(now);
         match action {
+            Action::MoveDeviceCursor(delta) => self.move_device_cursor(delta),
             Action::SelectDevice(index) if index < self.devices.len() => {
                 self.selected = Some(index);
+                self.device_cursor = index;
                 self.confirmation.clear();
                 self.screen = Screen::ConfirmDevice;
             }
@@ -240,6 +254,7 @@ impl AppModel {
                     self.push_event(now, "Warning: unrecognized SBC layout".into());
                 }
             }
+            Action::Tick => {}
         }
     }
 
@@ -302,6 +317,20 @@ impl AppModel {
         if self.operation_started_at.is_none() {
             self.operation_started_at = Some(now);
         }
+    }
+
+    fn move_device_cursor(&mut self, delta: i8) {
+        let len = self.devices.len();
+        if len == 0 || delta == 0 {
+            return;
+        }
+        self.device_cursor = if delta > 0 {
+            (self.device_cursor + 1) % len
+        } else if self.device_cursor == 0 {
+            len - 1
+        } else {
+            self.device_cursor - 1
+        };
     }
 
     fn set_phase(&mut self, phase: OperationPhase, now: Instant, message: &str) {
