@@ -21,12 +21,13 @@ jobs:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Install storage test tools
-        run: sudo apt-get update && sudo apt-get install -y dosfstools e2fsprogs fdisk jq shellcheck xz-utils
+        run: sudo apt-get update && sudo apt-get install -y dosfstools e2fsprogs fdisk jq shellcheck xz-utils zstd
       - run: cargo test --workspace --all-features
       - run: shellcheck tests/**/*.sh crates/rust-imager-first-boot/assets/*.sh
       - run: tests/fixtures/generate.sh
       - run: sudo tests/integration/quiescence.sh
       - run: sudo tests/integration/fault-injection.sh
+      - run: sudo tests/integration/full-engine.sh
       - uses: actions/cache@v4
         with:
           path: ~/.cache/rust-imager/images
