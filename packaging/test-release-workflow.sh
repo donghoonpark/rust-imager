@@ -47,6 +47,7 @@ grep -Fq "needs: [metadata, build, compatibility]" "$workflow" ||
     fail "publish does not require the full matrix"
 grep -Fq "github.event_name == 'push'" "$workflow" || fail "publishing is not tag-only"
 grep -Fq "SHA256SUMS" "$workflow" || fail "checksums are not generated"
+grep -Fq "GH_REPO:" "$workflow" || fail "release command cannot identify the repository"
 grep -Fq "retention-days:" "$workflow" || fail "manual artifacts have no retention"
 
 if grep -Eq 'uses: [^ ]+@v[0-9]' "$workflow"; then
