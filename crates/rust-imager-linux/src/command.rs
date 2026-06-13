@@ -5,6 +5,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 use thiserror::Error;
 
 /// A fully specified external command.
@@ -181,9 +183,16 @@ impl Runner for ProcessRunner {
                 program: spec.program.clone(),
                 source,
             })?;
-        let status = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        #[cfg(unix)]
+        if let Some(signal) = output.status.signal() {
+            return Err(CommandError::TerminatedBySignal {
+                program: spec.program.clone(),
+                signal,
+            });
+        }
+        let status = output.status.code().unwrap_or(-1);
         if status == 124 || status == 137 {
             Err(CommandError::TimedOut {
                 program: spec.program.clone(),

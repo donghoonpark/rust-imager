@@ -69,7 +69,7 @@ cp /etc/resolv.conf "$mount_dir/etc/resolv.conf"
 printf 'proc /proc proc defaults 0 0\nLABEL=rootfs / ext4 defaults 0 1\n' >"$mount_dir/etc/fstab"
 chroot "$mount_dir" apt-get update
 chroot "$mount_dir" apt-get install -y \
-    e2fsprogs fdisk grub2-common initramfs-tools linux-image-generic parted systemd-sysv
+    e2fsprogs fdisk grub2-common initramfs-tools linux-image-virtual parted systemd-sysv
 mkdir -p "$mount_dir/usr/lib/rust-imager" \
     "$mount_dir/etc/systemd/system/multi-user.target.wants"
 install -m 0755 crates/rust-imager-first-boot/assets/rust-imager-grow-root.sh \
