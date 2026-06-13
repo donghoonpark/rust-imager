@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::thread;
 
 use anyhow::{Context, Result, bail, ensure};
 use nix::unistd::Uid;
@@ -22,6 +23,8 @@ use rust_imager_pipeline::extract::{ExtractOptions, extract_path, partial_path};
 use rust_imager_pipeline::verify::{
     VerifyRequest, sidecar_partial_path, sidecar_path, verify_image, write_sidecar,
 };
+use signal_hook::consts::signal::{SIGINT, SIGTERM};
+use signal_hook::iterator::Signals;
 
 /// Fully confirmed imaging request.
 #[derive(Debug, Clone)]
@@ -365,10 +368,12 @@ fn execute(
         .tempdir_in("/run")
         .context("unable to create secure mutation mount directory")?;
     on_event(EngineEvent::Mutating);
-    execute_shrink(
-        &LinuxShrinkBackend::new(&runner, mutation_mount.path().to_path_buf()),
-        &shrink,
-    )?;
+    defer_termination(|| {
+        execute_shrink(
+            &LinuxShrinkBackend::new(&runner, mutation_mount.path().to_path_buf()),
+            &shrink,
+        )
+    })??;
     let extracted = extract_path(
         Path::new(&prepared.selected.path),
         &request.output,
@@ -474,6 +479,24 @@ fn normalize_output_path(output: &Path) -> Result<PathBuf> {
         .with_context(|| format!("unable to resolve output directory {}", parent.display()))?;
     let name = output.file_name().context("output path must name a file")?;
     Ok(parent.join(name))
+}
+
+fn defer_termination<T>(operation: impl FnOnce() -> T) -> Result<T> {
+    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    let handle = signals.handle();
+    let listener = thread::spawn(move || {
+        for signal in signals.forever() {
+            eprintln!(
+                "ignoring signal {signal} while source mutation is active; wait for the current operation"
+            );
+        }
+    });
+    let result = operation();
+    handle.close();
+    listener
+        .join()
+        .map_err(|_| anyhow::anyhow!("signal listener thread failed"))?;
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -112,7 +112,7 @@ pub fn quiesce_disk(
     });
     mounts.dedup();
     for mount in mounts {
-        runner.run(&spec("umount", &[&mount]))?;
+        runner.run(&spec("umount", &[&mount]).destructive())?;
     }
 
     let remaining = read_topology(runner, disk)?;

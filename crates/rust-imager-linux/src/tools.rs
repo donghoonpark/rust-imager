@@ -23,8 +23,11 @@ impl<'a> E2fsTools<'a> {
     /// Returns [`CommandError`] when `e2fsck` fails.
     pub fn check(&self, device: &str, force_repair: bool) -> Result<CommandResult, CommandError> {
         let mode = if force_repair { "-y" } else { "-p" };
-        self.runner
-            .run(&spec("e2fsck", &["-f", mode, device]).accepting([0, 1, 2]))
+        self.runner.run(
+            &spec("e2fsck", &["-f", mode, device])
+                .accepting([0, 1, 2])
+                .destructive(),
+        )
     }
 
     /// Check an ext filesystem without making repairs.
@@ -43,7 +46,7 @@ impl<'a> E2fsTools<'a> {
     /// Returns [`CommandError`] when `resize2fs` fails.
     pub fn resize(&self, device: &str, kibibytes: u64) -> Result<CommandResult, CommandError> {
         self.runner
-            .run(&spec("resize2fs", &[device, &format!("{kibibytes}K")]))
+            .run(&spec("resize2fs", &[device, &format!("{kibibytes}K")]).destructive())
     }
 }
 
@@ -86,7 +89,8 @@ impl<'a> PartitionTools<'a> {
                 "sfdisk",
                 &["--no-reread", "--force", "-N", &number.to_string(), disk],
             )
-            .with_stdin(format!("start={start_lba}, size={size}\n")),
+            .with_stdin(format!("start={start_lba}, size={size}\n"))
+            .destructive(),
         )
     }
 
@@ -96,7 +100,7 @@ impl<'a> PartitionTools<'a> {
     ///
     /// Returns [`CommandError`] when `partprobe` fails.
     pub fn reread(&self, disk: &str) -> Result<CommandResult, CommandError> {
-        self.runner.run(&spec("partprobe", &[disk]))
+        self.runner.run(&spec("partprobe", &[disk]).destructive())
     }
 }
 
@@ -123,7 +127,7 @@ impl<'a> MountTools<'a> {
         target: &str,
     ) -> Result<CommandResult, CommandError> {
         self.runner
-            .run(&spec("mount", &["-o", "rw", device, target]))
+            .run(&spec("mount", &["-o", "rw", device, target]).destructive())
     }
 
     /// Unmount a filesystem.
@@ -144,7 +148,7 @@ impl<'a> MountTools<'a> {
         }
         let mut last = mounted;
         for target in last.stdout.lines().map(str::to_owned).collect::<Vec<_>>() {
-            last = self.runner.run(&spec("umount", &[&target]))?;
+            last = self.runner.run(&spec("umount", &[&target]).destructive())?;
         }
         Ok(last)
     }

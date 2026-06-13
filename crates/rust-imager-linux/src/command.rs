@@ -3,6 +3,7 @@
 use std::ffi::OsString;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -17,6 +18,8 @@ pub struct CommandSpec {
     pub stdin: Option<Vec<u8>>,
     /// Exit statuses considered successful.
     pub accepted_statuses: Vec<i32>,
+    /// Maximum wall-clock runtime.
+    pub timeout: Duration,
 }
 
 impl CommandSpec {
@@ -27,6 +30,7 @@ impl CommandSpec {
             args: args.into_iter().collect(),
             stdin: None,
             accepted_statuses: vec![0],
+            timeout: Duration::from_secs(120),
         }
     }
 
@@ -42,6 +46,19 @@ impl CommandSpec {
     pub fn accepting(mut self, statuses: impl IntoIterator<Item = i32>) -> Self {
         self.accepted_statuses = statuses.into_iter().collect();
         self
+    }
+
+    /// Set a finite wall-clock timeout.
+    #[must_use]
+    pub const fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Use the long timeout reserved for destructive storage operations.
+    #[must_use]
+    pub const fn destructive(self) -> Self {
+        self.with_timeout(Duration::from_secs(6 * 60 * 60))
     }
 }
 
@@ -77,6 +94,22 @@ pub enum CommandError {
         /// Lossy stderr text.
         stderr: String,
     },
+    /// GNU `timeout` stopped a command after its deadline.
+    #[error("command {program:?} timed out after {timeout:?}")]
+    TimedOut {
+        /// Program that exceeded its deadline.
+        program: OsString,
+        /// Configured timeout.
+        timeout: Duration,
+    },
+    /// A child command terminated because of a Unix signal.
+    #[error("command {program:?} terminated by signal {signal}")]
+    TerminatedBySignal {
+        /// Program that was terminated.
+        program: OsString,
+        /// Unix signal number.
+        signal: i32,
+    },
 }
 
 /// Replaceable command executor.
@@ -95,8 +128,27 @@ pub struct ProcessRunner;
 
 impl Runner for ProcessRunner {
     fn run(&self, spec: &CommandSpec) -> Result<CommandResult, CommandError> {
-        let mut child = Command::new(&spec.program)
-            .args(&spec.args)
+        #[cfg(target_os = "linux")]
+        let mut command = {
+            let milliseconds = spec.timeout.as_millis().max(1);
+            let mut command = Command::new("setsid");
+            command.args([
+                OsString::from("timeout"),
+                OsString::from("--signal=TERM"),
+                OsString::from("--kill-after=10s"),
+                OsString::from(format!("{milliseconds}ms")),
+                spec.program.clone(),
+            ]);
+            command.args(&spec.args);
+            command
+        };
+        #[cfg(not(target_os = "linux"))]
+        let mut command = {
+            let mut command = Command::new(&spec.program);
+            command.args(&spec.args);
+            command
+        };
+        let mut child = command
             .env("LC_ALL", "C")
             .stdin(if spec.stdin.is_some() {
                 Stdio::piped()
@@ -133,7 +185,17 @@ impl Runner for ProcessRunner {
         let status = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        if spec.accepted_statuses.contains(&status) {
+        if status == 124 || status == 137 {
+            Err(CommandError::TimedOut {
+                program: spec.program.clone(),
+                timeout: spec.timeout,
+            })
+        } else if status > 128 {
+            Err(CommandError::TerminatedBySignal {
+                program: spec.program.clone(),
+                signal: status - 128,
+            })
+        } else if spec.accepted_statuses.contains(&status) {
             Ok(CommandResult {
                 status,
                 stdout,
