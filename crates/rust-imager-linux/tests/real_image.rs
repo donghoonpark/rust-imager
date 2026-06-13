@@ -68,6 +68,9 @@ fn shrinks_extracts_and_verifies_real_sbc_image() -> Result<(), Box<dyn std::err
             root_start_lba: root.start_lba,
             root_end_lba: plan.shrink.root_end_lba,
             target_filesystem_kib: plan.shrink.target_filesystem_bytes / 1024,
+            device_size_bytes: size,
+            logical_sector_size: 512,
+            original_mbr: mbr.clone(),
         },
     )?;
 

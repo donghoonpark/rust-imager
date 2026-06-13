@@ -66,8 +66,8 @@ struct Prepared {
     root_number: u8,
     root_start_lba: u64,
     root_path: String,
-    total_sectors: u64,
     partitions: Vec<PartitionMetadata>,
+    original_mbr: rust_imager_core::mbr::Mbr,
     unknown_layout_warning: bool,
 }
 
@@ -250,10 +250,6 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
     }
     let unknown_layout_warning = analysis.layout == LayoutClass::WarningUnknown;
     let mbr = analysis.mbr;
-    let total_sectors = selected
-        .size_bytes
-        .checked_div(selected.logical_sector_size)
-        .context("invalid device sector size")?;
     let root = mbr
         .partitions
         .iter()
@@ -310,8 +306,8 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         root_number: root.number,
         root_start_lba: root.start_lba,
         root_path,
-        total_sectors,
         partitions,
+        original_mbr: mbr,
         unknown_layout_warning,
     })
 }
@@ -360,6 +356,9 @@ fn execute(
         root_start_lba: prepared.root_start_lba,
         root_end_lba: prepared.plan.shrink.root_end_lba,
         target_filesystem_kib: prepared.plan.shrink.target_filesystem_bytes / 1024,
+        device_size_bytes: prepared.selected.size_bytes,
+        logical_sector_size: prepared.selected.logical_sector_size,
+        original_mbr: prepared.original_mbr,
     };
     let mutation_mount = tempfile::Builder::new()
         .prefix("rust-imager-root-")
@@ -370,17 +369,6 @@ fn execute(
         &LinuxShrinkBackend::new(&runner, mutation_mount.path().to_path_buf()),
         &shrink,
     )?;
-    let changed = read_mbr_from_disk(Path::new(&prepared.selected.path), prepared.total_sectors)?;
-    let changed_root = changed
-        .partitions
-        .iter()
-        .find(|partition| partition.number == prepared.root_number)
-        .context("root partition missing after resize")?;
-    ensure!(
-        changed_root.end_lba == prepared.plan.shrink.root_end_lba,
-        "partition geometry did not match the immutable plan"
-    );
-
     let extracted = extract_path(
         Path::new(&prepared.selected.path),
         &request.output,

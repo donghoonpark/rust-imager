@@ -27,6 +27,15 @@ impl<'a> E2fsTools<'a> {
             .run(&spec("e2fsck", &["-f", mode, device]).accepting([0, 1, 2]))
     }
 
+    /// Check an ext filesystem without making repairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] when `e2fsck` reports an invalid filesystem.
+    pub fn check_read_only(&self, device: &str) -> Result<CommandResult, CommandError> {
+        self.runner.run(&spec("e2fsck", &["-f", "-n", device]))
+    }
+
     /// Resize ext4 to an explicit KiB target.
     ///
     /// # Errors

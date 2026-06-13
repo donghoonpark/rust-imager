@@ -2,11 +2,13 @@
 
 use std::path::PathBuf;
 
+use rust_imager_core::mbr::Mbr;
 use rust_imager_first_boot::install::install;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::command::Runner;
+use crate::inspect::{Ext4Geometry, ext4_geometry, read_mbr_from_disk};
 use crate::quiescence::{quiesce_disk, sysfs_holders};
 use crate::tools::{E2fsTools, MountTools, PartitionTools};
 
@@ -25,6 +27,12 @@ pub struct ShrinkRequest {
     pub root_end_lba: u64,
     /// New ext4 size in KiB.
     pub target_filesystem_kib: u64,
+    /// Original device capacity used for MBR bounds validation.
+    pub device_size_bytes: u64,
+    /// Supported logical sector size.
+    pub logical_sector_size: u64,
+    /// Original validated MBR whose non-root entries must not change.
+    pub original_mbr: Mbr,
 }
 
 /// Mutation stage, in required execution order.
@@ -164,7 +172,97 @@ impl ShrinkBackend for LinuxShrinkBackend<'_> {
                 .reread(&request.disk)
                 .map(|_| ())
                 .map_err(|error| error.to_string()),
-            ShrinkStage::Revalidate => Ok(()),
+            ShrinkStage::Revalidate => {
+                let total_sectors = request
+                    .device_size_bytes
+                    .checked_div(request.logical_sector_size)
+                    .ok_or_else(|| "invalid logical sector size".to_owned())?;
+                let changed =
+                    read_mbr_from_disk(std::path::Path::new(&request.disk), total_sectors)
+                        .map_err(|error| error.to_string())?;
+                let geometry = ext4_geometry(self.runner, &request.root_partition)
+                    .map_err(|error| error.to_string())?;
+                validate_post_shrink(request, &changed, geometry)?;
+                e2fs.check_read_only(&request.root_partition)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            }
         }
     }
+}
+
+/// Validate MBR and ext4 invariants after destructive shrink operations.
+///
+/// # Errors
+///
+/// Returns a diagnostic when any original non-root entry changed, root identity
+/// fields changed, the planned end was not applied, or ext4 does not fit.
+pub fn validate_post_shrink(
+    request: &ShrinkRequest,
+    changed: &Mbr,
+    geometry: Ext4Geometry,
+) -> Result<(), String> {
+    if request.logical_sector_size == 0 {
+        return Err("invalid logical sector size".into());
+    }
+    let original_root = request
+        .original_mbr
+        .partitions
+        .iter()
+        .find(|partition| partition.number == request.partition_number)
+        .ok_or_else(|| "original root partition is missing".to_owned())?;
+    let changed_root = changed
+        .partitions
+        .iter()
+        .find(|partition| partition.number == request.partition_number)
+        .ok_or_else(|| "root partition is missing after shrink".to_owned())?;
+    for original in request
+        .original_mbr
+        .partitions
+        .iter()
+        .filter(|partition| partition.number != request.partition_number)
+    {
+        let current = changed
+            .partitions
+            .iter()
+            .find(|partition| partition.number == original.number)
+            .ok_or_else(|| format!("partition {} disappeared", original.number))?;
+        if current != original {
+            return Err(format!(
+                "partition {} changed unexpectedly",
+                original.number
+            ));
+        }
+    }
+    if changed.partitions.len() != request.original_mbr.partitions.len() {
+        return Err("partition count changed unexpectedly".into());
+    }
+    if changed_root.start_lba != original_root.start_lba
+        || changed_root.start_lba != request.root_start_lba
+        || changed_root.type_code != original_root.type_code
+        || changed_root.kind != original_root.kind
+        || changed_root.bootable != original_root.bootable
+    {
+        return Err("root partition identity fields changed".into());
+    }
+    if changed_root.end_lba != request.root_end_lba {
+        return Err("root partition end does not match the plan".into());
+    }
+    let partition_bytes = changed_root
+        .sectors
+        .checked_mul(request.logical_sector_size)
+        .ok_or_else(|| "partition byte size overflow".to_owned())?;
+    if geometry.current_bytes > partition_bytes {
+        return Err("ext4 filesystem exceeds the root partition".into());
+    }
+    let target_bytes = request
+        .target_filesystem_kib
+        .checked_mul(1024)
+        .ok_or_else(|| "target filesystem size overflow".to_owned())?;
+    if geometry.current_bytes > target_bytes
+        || target_bytes.saturating_sub(geometry.current_bytes) >= geometry.block_size
+    {
+        return Err("ext4 size does not match the requested target".into());
+    }
+    Ok(())
 }
