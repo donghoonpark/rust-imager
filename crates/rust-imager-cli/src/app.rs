@@ -89,6 +89,7 @@ pub fn require_linux_root() -> Result<()> {
 /// Discover candidates from current Linux topology.
 pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
     let runner = ProcessRunner;
+    let normalized_output = output.map(normalize_output_path).transpose()?;
     let lsblk = run_text(
         &runner,
         "lsblk",
@@ -104,7 +105,12 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
         "findmnt",
         &["--json", "--real", "--output", "TARGET,SOURCE"],
     )?;
-    discover_candidates(&lsblk, &findmnt, output.and_then(Path::to_str)).map_err(Into::into)
+    discover_candidates(
+        &lsblk,
+        &findmnt,
+        normalized_output.as_deref().and_then(Path::to_str),
+    )
+    .map_err(Into::into)
 }
 
 /// Analyze, shrink, extract, verify, and write metadata.
@@ -228,6 +234,10 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         .find(|device| device.path == request.device)
         .cloned()
         .context("selected device is not currently a safe USB /dev/sdX candidate")?;
+    ensure!(
+        selected.logical_sector_size == 512,
+        "only 512-byte logical-sector devices are supported"
+    );
     ensure!(
         selected.model == request.confirm_model.trim(),
         "device model confirmation does not match"
@@ -466,6 +476,18 @@ fn run_text(runner: &dyn Runner, program: &str, args: &[&str]) -> Result<String>
         .stdout)
 }
 
+fn normalize_output_path(output: &Path) -> Result<PathBuf> {
+    let parent = output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent = parent
+        .canonicalize()
+        .with_context(|| format!("unable to resolve output directory {}", parent.display()))?;
+    let name = output.file_name().context("output path must name a file")?;
+    Ok(parent.join(name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +532,22 @@ mod tests {
         let output = directory.path().join("image.zst");
         fs::write(sidecar_path(&output), b"existing").expect("fixture");
         assert!(validate_request(&request(output, Compression::Zstandard { level: 3 })).is_err());
+    }
+
+    #[test]
+    fn normalizes_relative_and_symlinked_output_parents() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let link = directory.path().join("link");
+        std::os::unix::fs::symlink(directory.path(), &link).expect("symlink");
+        let normalized = normalize_output_path(&link.join("image.zst")).expect("normalized output");
+        assert_eq!(
+            normalized,
+            directory
+                .path()
+                .canonicalize()
+                .expect("canonical tempdir")
+                .join("image.zst")
+        );
+        assert!(normalized.is_absolute());
     }
 }

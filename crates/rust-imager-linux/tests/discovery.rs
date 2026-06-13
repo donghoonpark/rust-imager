@@ -52,3 +52,21 @@ fn invalid_json_is_reported() {
         Err(DiscoveryError::InvalidLsblk(_))
     ));
 }
+
+#[test]
+fn rejects_relative_output_paths_before_device_filtering() {
+    assert_eq!(
+        discover_candidates(LSBLK, FINDMNT, Some("image.img")),
+        Err(DiscoveryError::OutputPathNotAbsolute)
+    );
+}
+
+#[test]
+fn rejects_usb_disks_with_non_512_byte_logical_sectors() {
+    let topology = LSBLK.replace(
+        r#""path":"/dev/sda","type":"disk","size":64000000,"tran":"usb""#,
+        r#""path":"/dev/sda","type":"disk","size":64000000,"log-sec":4096,"tran":"usb""#,
+    );
+    let candidates = discover_candidates(&topology, FINDMNT, None).expect("valid 4Kn fixture");
+    assert!(candidates.iter().all(|device| device.path != "/dev/sda"));
+}

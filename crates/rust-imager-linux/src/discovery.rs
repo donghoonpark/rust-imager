@@ -19,6 +19,9 @@ pub enum DiscoveryError {
     /// The selected device no longer has the captured identity.
     #[error("selected device identity changed")]
     IdentityChanged,
+    /// Output-device filtering requires a normalized absolute path.
+    #[error("output path must be absolute before device discovery")]
+    OutputPathNotAbsolute,
 }
 
 impl PartialEq for DiscoveryError {
@@ -28,6 +31,7 @@ impl PartialEq for DiscoveryError {
             (Self::InvalidLsblk(_), Self::InvalidLsblk(_))
                 | (Self::InvalidFindmnt(_), Self::InvalidFindmnt(_))
                 | (Self::IdentityChanged, Self::IdentityChanged)
+                | (Self::OutputPathNotAbsolute, Self::OutputPathNotAbsolute)
         )
     }
 }
@@ -84,6 +88,9 @@ pub fn discover_candidates(
     findmnt_json: &str,
     output_path: Option<&str>,
 ) -> Result<Vec<DeviceIdentity>, DiscoveryError> {
+    if output_path.is_some_and(|output| !Path::new(output).is_absolute()) {
+        return Err(DiscoveryError::OutputPathNotAbsolute);
+    }
     let topology: Lsblk = serde_json::from_str(lsblk_json).map_err(DiscoveryError::InvalidLsblk)?;
     let mounts: Findmnt =
         serde_json::from_str(findmnt_json).map_err(DiscoveryError::InvalidFindmnt)?;
@@ -119,6 +126,7 @@ pub fn discover_candidates(
             device.kind == "disk"
                 && valid_sd_path(&device.path)
                 && device.tran.as_deref() == Some("usb")
+                && device.logical_sector_size == 512
                 && !excluded.contains(&device.path)
         })
         .map(|device| DeviceIdentity {

@@ -22,6 +22,9 @@ Only whole USB disks matching `/dev/sd[a-z]+` are considered. The running
 system's root/boot disk, active swap disks, and the output filesystem's disk are
 excluded. The selected path, major/minor number, serial, model, capacity,
 logical sector size, and transport are captured and re-read before mutation.
+Version 0.1 accepts only 512-byte logical-sector devices; 4Kn devices are
+rejected until their DOS/GPT detection and resize behavior have a dedicated
+validation matrix.
 
 The exact model string must be typed before proceeding. Unknown but structurally
 compatible layouts display a strong warning. Profile detection is a heuristic;
