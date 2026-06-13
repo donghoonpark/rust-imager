@@ -76,6 +76,16 @@ Launch the wizard:
 sudo rust-imager
 ```
 
+The TUI adapts from a full dashboard to compact terminals. It shows the setup
+and operation timelines, selected device identity, destructive-phase warnings,
+live extraction percentage, throughput, elapsed time, ETA, and recent engine
+events. Failures remain visible until acknowledged.
+
+Use `Up`/`Down` or `j`/`k` and `Enter` to select a device. The footer shows the
+valid controls for each step; output compression uses `F2` for Zstandard and
+`F3` for XZ. `Esc` cancels before mutation. Completed and failed operations
+close with `Enter` or `Esc`.
+
 List eligible devices:
 
 ```bash

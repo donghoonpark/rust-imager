@@ -89,7 +89,7 @@ fn render_compact(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(3),
-            Constraint::Length(if model.error.is_some() { 4 } else { 2 }),
+            Constraint::Length(if model.error.is_some() { 4 } else { 3 }),
         ])
         .split(area);
 
@@ -458,8 +458,14 @@ fn render_status(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
     if let Some(error) = &model.error {
         frame.render_widget(
             Paragraph::new(vec![
-                Line::from(Span::styled("FAILED", theme::failure())),
-                Line::from(error.as_str()),
+                Line::from(vec![
+                    Span::styled("FAILED  ", theme::failure()),
+                    Span::raw(error.as_str()),
+                ]),
+                Line::from(Span::styled(
+                    "Enter/Esc: acknowledge and close",
+                    theme::muted(),
+                )),
             ])
             .block(
                 Block::default()
@@ -473,10 +479,18 @@ fn render_status(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
         return;
     }
 
-    let help = if is_operation(model.screen) {
-        "LIVE  |  Do not disconnect the source  |  Ctrl+C: request stop"
-    } else {
-        "Up/Down: navigate  |  Enter: continue  |  Esc: cancel"
+    let help = match model.screen {
+        Screen::DeviceSelection => "Up/Down or j/k: navigate  |  Enter: select  |  Esc: cancel",
+        Screen::ConfirmDevice => "Type the exact model  |  Enter: continue  |  Esc: cancel",
+        Screen::Output => "Type output path  |  F2: Zstd  |  F3: XZ  |  Enter: continue",
+        Screen::Verification => {
+            "1: None  |  2: Hash  |  3: Decode  |  4: Source reread  |  Enter: continue"
+        }
+        Screen::Review => "Enter: start destructive imaging  |  Esc: cancel",
+        Screen::Complete => "COMPLETE  |  Enter/Esc: close",
+        Screen::Preparing | Screen::Mutating | Screen::Extracting | Screen::Verifying => {
+            "LIVE  |  Do not disconnect the source"
+        }
     };
     frame.render_widget(
         Paragraph::new(Line::from(vec![
