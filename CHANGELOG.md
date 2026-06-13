@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-06-13
 
 - Add Linux-only Rust TUI and non-interactive CLI.
 - Detect safe external USB `/dev/sdX` candidates and reject system/output/swap
@@ -13,3 +13,7 @@
 - Add optional streaming hash, decode verification, and source reread.
 - Write versioned JSON metadata and durable logs without overwriting files.
 - Add synthetic, fault-injection, real-image, QEMU, and performance validation.
+- Add installable `amd64` and `arm64` Debian packages built against Ubuntu
+  18.04 and install-tested on every Ubuntu LTS through 26.04.
+- Publish tagged releases only after all ten package compatibility jobs pass,
+  with SHA-256 checksums and manual non-publishing validation runs.

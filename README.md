@@ -34,6 +34,26 @@ GPT, extended/logical partitions, live system eMMC, `/dev/mmcblkN`, RPMB,
 separately exposed boot0/boot1 devices, network output, and non-ext4 root
 filesystems are rejected.
 
+## Install
+
+GitHub Releases provide one Debian package for each supported architecture:
+
+- `rust-imager_<version>_amd64.deb`
+- `rust-imager_<version>_arm64.deb`
+
+The same package is install-tested on Ubuntu 18.04, 20.04, 22.04, 24.04, and
+26.04. Download the package matching `dpkg --print-architecture` together with
+`SHA256SUMS`, then verify and install it:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+sudo apt install ./rust-imager_<version>_<architecture>.deb
+```
+
+The package installs `rust-imager` in `/usr/sbin` and declares `e2fsprogs`,
+`fdisk`, `mount`, `parted`, and `util-linux` as runtime dependencies.
+Destructive imaging commands must still be run with `sudo`.
+
 ## Build
 
 ```bash
@@ -45,7 +65,7 @@ sudo install -m 0755 target/release/rust-imager /usr/local/sbin/rust-imager
 Runtime tools:
 
 ```bash
-sudo apt install e2fsprogs fdisk mount util-linux
+sudo apt install e2fsprogs fdisk mount parted util-linux
 ```
 
 ## Use

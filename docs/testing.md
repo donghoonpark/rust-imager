@@ -79,9 +79,51 @@ Automation cannot establish:
 - sustained USB 2.0 throughput on physical host controllers
 - eMMC boot0/boot1 areas not exposed in the user-data disk address space
 
+## Ubuntu Packages
+
+Package script contracts and static container/release checks run without
+modifying block devices:
+
+```bash
+docker run --rm -v "$PWD:/workspace" -w /workspace ubuntu:24.04 \
+  bash -lc 'packaging/debian/test-build-deb.sh &&
+            packaging/debian/test-test-package.sh'
+bash packaging/test-container-scripts.sh
+bash packaging/test-release-workflow.sh
+shellcheck packaging/*.sh packaging/debian/*.sh
+actionlint .github/workflows/release.yml
+```
+
+Build an architecture package in an Ubuntu 18.04 userspace:
+
+```bash
+packaging/build-package.sh 0.1.0 amd64 dist
+packaging/build-package.sh 0.1.0 arm64 dist
+```
+
+Docker Buildx and QEMU/binfmt support are required when the requested
+architecture differs from the host. Install-test one package on every supported
+Ubuntu LTS:
+
+```bash
+packaging/test-lts-matrix.sh \
+  dist/rust-imager_0.1.0_amd64.deb 0.1.0 amd64
+```
+
+The matrix is Ubuntu 18.04, 20.04, 22.04, 24.04, and 26.04. Passing a fourth
+argument tests only that version. A missing image, failed package dependency,
+unresolved shared library, or emulation failure stops the run.
+
+Manual dispatch of `release.yml` builds `amd64` and `arm64` packages, executes
+all ten architecture/LTS combinations, and retains test artifacts without
+creating a release. A `v<workspace-version>` tag runs the same gates and then
+publishes both packages and `SHA256SUMS` to GitHub Releases.
+
 ## CI
 
 - `ci.yml`: format, Clippy, unit/integration-safe tests, dependency advisories
   and licenses.
 - `heavy-ci.yml`: scheduled/manual privileged fixtures, device-mapper failure,
   real image downloads, and QEMU first-boot expansion.
+- `release.yml`: Ubuntu 18.04-based `amd64`/`arm64` packages, installation tests
+  on Ubuntu 18.04 through 26.04, and guarded tag release publication.
