@@ -28,8 +28,8 @@ case "${1:-}" in
         ;;
 esac
 
-if [[ $# -ne 3 ]]; then
-    echo "usage: $0 <package.deb> <version> <amd64|arm64>" >&2
+if [[ $# -lt 3 || $# -gt 4 ]]; then
+    echo "usage: $0 <package.deb> <version> <amd64|arm64> [ubuntu-version]" >&2
     exit 2
 fi
 
@@ -37,6 +37,7 @@ package=$1
 version=$2
 architecture=$3
 platform=$(platform_for "$architecture")
+selected_version=${4:-}
 
 [[ -f "$package" ]] || {
     echo "package does not exist: $package" >&2
@@ -53,7 +54,23 @@ trap 'rm -rf "$context"' EXIT
 cp "$package" "$context/rust-imager.deb"
 cp "$repo_root/packaging/debian/test-package.sh" "$context/test-package.sh"
 
-for ubuntu_version in "${lts_versions[@]}"; do
+versions=("${lts_versions[@]}")
+if [[ -n "$selected_version" ]]; then
+    supported=false
+    for ubuntu_version in "${lts_versions[@]}"; do
+        if [[ "$ubuntu_version" == "$selected_version" ]]; then
+            supported=true
+            break
+        fi
+    done
+    [[ "$supported" == true ]] || {
+        echo "unsupported Ubuntu LTS version: $selected_version" >&2
+        exit 1
+    }
+    versions=("$selected_version")
+fi
+
+for ubuntu_version in "${versions[@]}"; do
     echo "Testing rust-imager $version ($architecture) on Ubuntu $ubuntu_version"
     docker buildx build \
         --platform "$platform" \

@@ -23,7 +23,7 @@ expect_failure() {
 [[ -f "$test_dockerfile" ]] || fail "test Dockerfile missing"
 [[ -f "$dockerignore" ]] || fail ".dockerignore missing"
 grep -Fxq 'target' "$dockerignore" || fail "Rust build output is not excluded from Docker context"
-grep -Fxq 'FROM --platform=$TARGETPLATFORM ubuntu:18.04 AS build' "$build_dockerfile" ||
+grep -Fxq "FROM --platform=\$TARGETPLATFORM ubuntu:18.04 AS build" "$build_dockerfile" ||
     fail "build userspace is not pinned to Ubuntu 18.04"
 grep -Fq 'rust-toolchain.toml' "$build_dockerfile" ||
     fail "build does not use the pinned Rust toolchain"

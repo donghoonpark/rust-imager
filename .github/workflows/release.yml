@@ -1,0 +1,141 @@
+name: Ubuntu packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      package-version: ${{ steps.version.outputs.package-version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Resolve package version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          package_version=$(packaging/release-version.sh "$EVENT_NAME" "$GIT_REF" "$RUN_NUMBER")
+          echo "package-version=$package_version" >>"$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            grep -Eq "^## ${package_version} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md
+          fi
+
+  build:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Enable QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        with:
+          platforms: amd64,arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Build package in Ubuntu 18.04
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.package-version }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: packaging/build-package.sh "$PACKAGE_VERSION" "$ARCHITECTURE" dist
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-${{ matrix.architecture }}
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  compatibility:
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            ubuntu: '18.04'
+          - architecture: amd64
+            ubuntu: '20.04'
+          - architecture: amd64
+            ubuntu: '22.04'
+          - architecture: amd64
+            ubuntu: '24.04'
+          - architecture: amd64
+            ubuntu: '26.04'
+          - architecture: arm64
+            ubuntu: '18.04'
+          - architecture: arm64
+            ubuntu: '20.04'
+          - architecture: arm64
+            ubuntu: '22.04'
+          - architecture: arm64
+            ubuntu: '24.04'
+          - architecture: arm64
+            ubuntu: '26.04'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-${{ matrix.architecture }}
+          path: dist
+      - name: Enable QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+        with:
+          platforms: amd64,arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Install and smoke-test package
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.package-version }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          UBUNTU_VERSION: ${{ matrix.ubuntu }}
+        run: |
+          package="dist/rust-imager_${PACKAGE_VERSION}_${ARCHITECTURE}.deb"
+          packaging/test-lts-matrix.sh \
+            "$package" "$PACKAGE_VERSION" "$ARCHITECTURE" "$UBUNTU_VERSION"
+
+  publish:
+    if: github.event_name == 'push'
+    needs: [metadata, build, compatibility]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum ./*.deb >SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/*.deb dist/SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              dist/*.deb dist/SHA256SUMS \
+              --generate-notes \
+              --verify-tag
+          fi
