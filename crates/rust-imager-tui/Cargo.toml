@@ -9,7 +9,7 @@ rust-version.workspace = true
 [dependencies]
 crossterm.workspace = true
 ratatui.workspace = true
-rust-imager-core = { version = "0.2.3", path = "../rust-imager-core" }
+rust-imager-core = { version = "0.2.4", path = "../rust-imager-core" }
 thiserror.workspace = true
 
 [lints]
