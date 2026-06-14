@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3 - 2026-06-14
+
+- Generate timestamped output paths from the selected device and keep automatic
+  extensions synchronized with the chosen compression format.
+- Add reversible setup navigation, early output-collision checks, and a
+  read-only capacity plan before destructive work begins.
+- Prioritize destructive target and first irreversible action in review.
+- Show final size ratio, SHA-256, verification status, metadata, log, and
+  elapsed time on completion.
+- Add a privileged loop-backed Docker demo that exercises filesystem shrink,
+  MBR resize, extraction, compression, verification, and artifact generation
+  through real `/dev/sdz*` block nodes.
+
 ## 0.2.2 - 2026-06-14
 
 - Complete extensionless TUI output paths as `.img.zst` or `.img.xz` from the
