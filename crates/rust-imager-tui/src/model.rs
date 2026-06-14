@@ -1,6 +1,7 @@
 //! Pure wizard state and reducer.
 
 use std::collections::VecDeque;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use rust_imager_core::device::DeviceIdentity;
@@ -371,9 +372,28 @@ impl AppModel {
             Screen::Output if self.output.trim().is_empty() => {
                 self.error = Some("Choose a local output path".into());
             }
-            Screen::Output => self.screen = Screen::Verification,
+            Screen::Output => {
+                self.complete_output_extension();
+                self.screen = Screen::Verification;
+            }
             Screen::Verification => self.screen = Screen::Review,
             _ => {}
+        }
+    }
+
+    fn complete_output_extension(&mut self) {
+        let (compression_extension, image_suffix, compression_suffix) = match self.compression {
+            Compression::Zstandard { .. } => ("zst", ".img.zst", ".zst"),
+            Compression::Xz { .. } => ("xz", ".img.xz", ".xz"),
+        };
+        match Path::new(&self.output)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
+            None => self.output.push_str(image_suffix),
+            Some("img") => self.output.push_str(compression_suffix),
+            Some(extension) if extension == compression_extension => {}
+            Some(_) => {}
         }
     }
 }

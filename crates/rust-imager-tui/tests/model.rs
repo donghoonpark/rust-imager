@@ -153,3 +153,67 @@ fn ticks_elapsed_time_without_dismissing_failure() {
     assert_eq!(model.elapsed(), Duration::from_secs(5));
     assert_eq!(model.error.as_deref(), Some("USB device disconnected"));
 }
+
+fn output_model(path: &str, compression: rust_imager_core::plan::Compression) -> AppModel {
+    let mut model = AppModel::new(Vec::new());
+    model.screen = Screen::Output;
+    model.output = path.into();
+    model.compression = compression;
+    model
+}
+
+#[test]
+fn completes_extensionless_zstd_output_with_image_suffix() {
+    let mut model = output_model(
+        "/output/board",
+        rust_imager_core::plan::Compression::Zstandard { level: 3 },
+    );
+    model.reduce(Action::Continue);
+
+    assert_eq!(model.output, "/output/board.img.zst");
+    assert_eq!(model.screen, Screen::Verification);
+}
+
+#[test]
+fn completes_img_output_with_selected_compression_suffix() {
+    let mut model = output_model(
+        "/output/board.img",
+        rust_imager_core::plan::Compression::Zstandard { level: 3 },
+    );
+    model.reduce(Action::Continue);
+
+    assert_eq!(model.output, "/output/board.img.zst");
+}
+
+#[test]
+fn preserves_matching_output_extension() {
+    let mut model = output_model(
+        "/output/board.img.zst",
+        rust_imager_core::plan::Compression::Zstandard { level: 3 },
+    );
+    model.reduce(Action::Continue);
+
+    assert_eq!(model.output, "/output/board.img.zst");
+}
+
+#[test]
+fn completes_extensionless_xz_output() {
+    let mut model = output_model(
+        "/output/board",
+        rust_imager_core::plan::Compression::Xz { level: 3 },
+    );
+    model.reduce(Action::Continue);
+
+    assert_eq!(model.output, "/output/board.img.xz");
+}
+
+#[test]
+fn preserves_conflicting_output_extension_for_engine_validation() {
+    let mut model = output_model(
+        "/output/board.raw",
+        rust_imager_core::plan::Compression::Zstandard { level: 3 },
+    );
+    model.reduce(Action::Continue);
+
+    assert_eq!(model.output, "/output/board.raw");
+}
