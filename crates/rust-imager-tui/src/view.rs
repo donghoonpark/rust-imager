@@ -540,12 +540,16 @@ fn render_status(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
 
     let help = match model.screen {
         Screen::DeviceSelection => "Up/Down or j/k: navigate  |  Enter: select  |  Esc: cancel",
-        Screen::ConfirmDevice => "Type the exact model  |  Enter: continue  |  Esc: cancel",
-        Screen::Output => "Type output path  |  F2: Zstd  |  F3: XZ  |  Enter: continue",
-        Screen::Verification => {
-            "1: None  |  2: Hash  |  3: Decode  |  4: Source reread  |  Enter: continue"
+        Screen::ConfirmDevice => {
+            "Type the exact model  |  Enter: continue  |  Left/Shift+Tab: back"
         }
-        Screen::Review => "Enter: start destructive imaging  |  Esc: cancel",
+        Screen::Output => "Type output path  |  F2: Zstd  |  F3: XZ  |  Left/Shift+Tab: back",
+        Screen::Verification => {
+            "1: None  |  2: Hash  |  3: Decode  |  4: Reread  |  Left/Shift+Tab: back"
+        }
+        Screen::Review => {
+            "Enter: start destructive imaging  |  Left/Shift+Tab: back  |  Esc: cancel"
+        }
         Screen::Complete => "COMPLETE  |  Enter/Esc: close",
         Screen::Preparing | Screen::Mutating | Screen::Extracting | Screen::Verifying => {
             "LIVE  |  Do not disconnect the source"
