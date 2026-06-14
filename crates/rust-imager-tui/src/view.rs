@@ -219,20 +219,7 @@ fn render_wizard(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
             area,
         ),
         Screen::Review => frame.render_widget(
-            Paragraph::new(vec![
-                Line::from(Span::styled("READY TO IMAGE", theme::warning())),
-                Line::default(),
-                label_value(
-                    "SOURCE",
-                    model
-                        .selected_device()
-                        .map_or("?", |value| value.path.as_str()),
-                ),
-                label_value("OUTPUT", value_or_dash(&model.output)),
-                label_value("COMPRESSION", &format!("{:?}", model.compression)),
-                label_value("VERIFY", &format!("{:?}", model.verification)),
-            ])
-            .block(panel(" REVIEW IMMUTABLE PLAN ")),
+            Paragraph::new(review_lines(model)).block(panel(" REVIEW IMMUTABLE PLAN ")),
             area,
         ),
         _ => {}
@@ -343,6 +330,12 @@ fn render_context(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
 
 fn render_operation(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
     let phase = model.operation_phase().unwrap_or(OperationPhase::Inspect);
+    if phase == OperationPhase::Complete
+        && let Some(result) = &model.operation_result
+    {
+        render_completion(frame, area, model, result);
+        return;
+    }
     if phase == OperationPhase::Extract {
         render_extraction(frame, area, model);
         return;
@@ -383,6 +376,72 @@ fn render_operation(frame: &mut Frame<'_>, area: Rect, model: &AppModel) {
         ])
         .alignment(Alignment::Center)
         .block(panel(" OPERATION ")),
+        area,
+    );
+}
+
+fn review_lines(model: &AppModel) -> Vec<Line<'_>> {
+    let mut lines = vec![
+        Line::from(Span::styled("DESTRUCTIVE TARGET", theme::failure())),
+        label_value(
+            "WHOLE DISK",
+            model
+                .selected_device()
+                .map_or("?", |value| value.path.as_str()),
+        ),
+    ];
+    if let Some(preview) = &model.plan_preview {
+        lines.extend([
+            label_value("ROOT PARTITION", &preview.root_partition),
+            label_owned("SOURCE SIZE", bytes(preview.source_size_bytes)),
+            label_owned("CURRENT EXT4", bytes(preview.current_filesystem_bytes)),
+            label_owned("PLANNED EXT4", bytes(preview.target_filesystem_bytes)),
+            label_owned("RAW IMAGE RANGE", bytes(preview.image_bytes)),
+            label_owned("OUTPUT FREE", bytes(preview.output_available_bytes)),
+        ]);
+    }
+    lines.extend([
+        label_value("OUTPUT", value_or_dash(&model.output)),
+        label_owned("COMPRESSION", format!("{:?}", model.compression)),
+        label_owned("VERIFY", format!("{:?}", model.verification)),
+        Line::default(),
+        Line::from(Span::styled(
+            "FIRST IRREVERSIBLE: filesystem check, first-boot install, then shrink",
+            theme::warning(),
+        )),
+    ]);
+    lines
+}
+
+fn render_completion(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    model: &AppModel,
+    result: &crate::model::OperationResult,
+) {
+    let ratio = if result.raw_bytes == 0 {
+        "0.0%".into()
+    } else {
+        percentage(result.compressed_bytes, result.raw_bytes)
+    };
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::styled("IMAGE COMPLETE", theme::complete())),
+            Line::default(),
+            label_value("OUTPUT", &result.output),
+            label_owned("RAW RANGE", bytes(result.raw_bytes)),
+            label_owned(
+                "COMPRESSED",
+                format!("{} ({ratio} of raw)", bytes(result.compressed_bytes)),
+            ),
+            label_value("SHA-256", &result.compressed_sha256),
+            label_value("VERIFICATION", &result.verification),
+            label_value("METADATA", &result.metadata_path),
+            label_value("LOG", &result.log_path),
+            label_owned("ELAPSED", duration(model.elapsed())),
+        ])
+        .block(panel(" OPERATION RESULT "))
+        .wrap(Wrap { trim: false }),
         area,
     );
 }

@@ -17,7 +17,7 @@ use ratatui::backend::CrosstermBackend;
 use rust_imager_core::device::DeviceIdentity;
 use rust_imager_core::plan::{Compression, VerificationLevel};
 use rust_imager_core::profile::LayoutClass;
-use rust_imager_tui::model::{Action, AppModel, PlanPreview, Screen};
+use rust_imager_tui::model::{Action, AppModel, OperationResult, PlanPreview, Screen};
 use rust_imager_tui::view::draw;
 use time::OffsetDateTime;
 use time::format_description::well_known::Iso8601;
@@ -95,7 +95,31 @@ fn apply_engine_event(model: &mut AppModel, event: EngineEvent) {
             model.reduce(Action::Progress { bytes, total });
         }
         EngineEvent::Verifying => model.reduce(Action::VerificationStarted),
-        EngineEvent::Complete => model.reduce(Action::Finished),
+        EngineEvent::Complete {
+            output,
+            raw_bytes,
+            compressed_bytes,
+            compressed_sha256,
+            verification,
+            metadata_path,
+            log_path,
+        } => {
+            model.reduce(Action::SetOperationResult(OperationResult {
+                output: output.to_string_lossy().into_owned(),
+                raw_bytes,
+                compressed_bytes,
+                compressed_sha256,
+                verification: match verification {
+                    rust_imager_core::metadata::VerificationStatus::NotPerformed => {
+                        "not performed".into()
+                    }
+                    rust_imager_core::metadata::VerificationStatus::Passed => "passed".into(),
+                },
+                metadata_path: metadata_path.to_string_lossy().into_owned(),
+                log_path: log_path.to_string_lossy().into_owned(),
+            }));
+            model.reduce(Action::Finished);
+        }
     }
 }
 

@@ -66,6 +66,25 @@ pub struct PlanPreview {
     pub root_partition: String,
 }
 
+/// Final image facts displayed after successful completion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationResult {
+    /// Final compressed image path.
+    pub output: String,
+    /// Raw image range size.
+    pub raw_bytes: u64,
+    /// Compressed file size.
+    pub compressed_bytes: u64,
+    /// SHA-256 of the compressed file.
+    pub compressed_sha256: String,
+    /// Verification outcome.
+    pub verification: String,
+    /// JSON metadata path.
+    pub metadata_path: String,
+    /// Durable operation log path.
+    pub log_path: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ProgressSample {
     at: Instant,
@@ -116,6 +135,8 @@ pub enum Action {
     SetVerification(VerificationLevel),
     /// Store a read-only execution plan preview.
     SetPlanPreview(PlanPreview),
+    /// Store successful operation result facts.
+    SetOperationResult(OperationResult),
     /// Advance after validating the current screen.
     Continue,
     /// Return to the previous setup screen.
@@ -169,6 +190,8 @@ pub struct AppModel {
     pub verification: VerificationLevel,
     /// Read-only plan facts shown during final review.
     pub plan_preview: Option<PlanPreview>,
+    /// Successful operation result facts.
+    pub operation_result: Option<OperationResult>,
     /// Latest error message.
     pub error: Option<String>,
     /// Whether the selected layout is structurally safe but unrecognized.
@@ -201,6 +224,7 @@ impl AppModel {
             compression: Compression::Zstandard { level: 3 },
             verification: VerificationLevel::Decode,
             plan_preview: None,
+            operation_result: None,
             error: None,
             unknown_layout_warning: false,
             progress_bytes: 0,
@@ -251,6 +275,7 @@ impl AppModel {
             }
             Action::SetVerification(value) => self.verification = value,
             Action::SetPlanPreview(value) => self.plan_preview = Some(value),
+            Action::SetOperationResult(value) => self.operation_result = Some(value),
             Action::Continue => self.continue_current(),
             Action::Previous => self.previous_screen(),
             Action::PreparationStarted => {

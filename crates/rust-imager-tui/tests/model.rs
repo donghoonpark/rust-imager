@@ -2,7 +2,9 @@
 
 use ratatui::{Terminal, backend::TestBackend};
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_tui::model::{Action, AppModel, OperationPhase, PlanPreview, Screen};
+use rust_imager_tui::model::{
+    Action, AppModel, OperationPhase, OperationResult, PlanPreview, Screen,
+};
 use rust_imager_tui::view::draw;
 use std::time::{Duration, Instant};
 
@@ -275,4 +277,21 @@ fn stores_read_only_plan_preview_for_review() {
     model.reduce(Action::SetPlanPreview(preview.clone()));
 
     assert_eq!(model.plan_preview, Some(preview));
+}
+
+#[test]
+fn stores_completed_operation_result() {
+    let mut model = AppModel::new(Vec::new());
+    let result = OperationResult {
+        output: "/images/board.img.zst".into(),
+        raw_bytes: 10_000,
+        compressed_bytes: 2_500,
+        compressed_sha256: "abc123".into(),
+        verification: "passed".into(),
+        metadata_path: "/images/board.img.zst.json".into(),
+        log_path: "/images/board.img.zst.log".into(),
+    };
+    model.reduce(Action::SetOperationResult(result.clone()));
+
+    assert_eq!(model.operation_result, Some(result));
 }

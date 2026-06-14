@@ -2,7 +2,7 @@
 
 use ratatui::{Terminal, backend::TestBackend};
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_tui::model::{Action, AppModel};
+use rust_imager_tui::model::{Action, AppModel, OperationResult, PlanPreview, Screen};
 use rust_imager_tui::view::draw;
 use std::time::{Duration, Instant};
 
@@ -91,4 +91,52 @@ fn failure_is_prominent_and_persistent() {
     let content = render(&model, 84, 24);
     assert!(content.contains("FAILED"));
     assert!(content.contains("USB device disconnected"));
+}
+
+#[test]
+fn review_prioritizes_plan_sizes_and_destructive_target() {
+    let mut model = AppModel::new(vec![device()]);
+    model.reduce(Action::SelectDevice(0));
+    model.screen = Screen::Review;
+    model.output = "/images/board.img.zst".into();
+    model.plan_preview = Some(PlanPreview {
+        source_size_bytes: 64_000_000_000,
+        current_filesystem_bytes: 8_000_000_000,
+        target_filesystem_bytes: 3_000_000_000,
+        image_bytes: 3_500_000_000,
+        output_available_bytes: 100_000_000_000,
+        root_partition: "/dev/sda2".into(),
+    });
+
+    let content = render(&model, 120, 36);
+    assert!(content.contains("DESTRUCTIVE TARGET"));
+    assert!(content.contains("/dev/sda2"));
+    assert!(content.contains("CURRENT EXT4"));
+    assert!(content.contains("PLANNED EXT4"));
+    assert!(content.contains("RAW IMAGE RANGE"));
+    assert!(content.contains("FIRST IRREVERSIBLE"));
+}
+
+#[test]
+fn completion_shows_artifacts_sizes_hash_and_ratio() {
+    let mut model = AppModel::new(Vec::new());
+    model.reduce(Action::PreparationStarted);
+    model.reduce(Action::SetOperationResult(OperationResult {
+        output: "/images/board.img.zst".into(),
+        raw_bytes: 10_000_000,
+        compressed_bytes: 2_500_000,
+        compressed_sha256: "abc123".into(),
+        verification: "passed".into(),
+        metadata_path: "/images/board.img.zst.json".into(),
+        log_path: "/images/board.img.zst.log".into(),
+    }));
+    model.reduce(Action::Finished);
+
+    let content = render(&model, 120, 36);
+    assert!(content.contains("IMAGE COMPLETE"));
+    assert!(content.contains("COMPRESSED"));
+    assert!(content.contains("25.0%"));
+    assert!(content.contains("abc123"));
+    assert!(content.contains("board.img.zst.json"));
+    assert!(content.contains("board.img.zst.log"));
 }

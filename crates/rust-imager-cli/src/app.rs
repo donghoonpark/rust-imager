@@ -9,7 +9,7 @@ use std::thread;
 use anyhow::{Context, Result, bail, ensure};
 use nix::unistd::Uid;
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_core::metadata::{ImageMetadata, PartitionMetadata};
+use rust_imager_core::metadata::{ImageMetadata, PartitionMetadata, VerificationStatus};
 use rust_imager_core::plan::ExecutionPlan;
 use rust_imager_core::plan::{Compression, PlanInput, VerificationLevel, build_plan};
 use rust_imager_core::profile::{LayoutClass, classify_layout};
@@ -59,7 +59,7 @@ pub struct ImagePreview {
 }
 
 /// Observable engine state for terminal and non-interactive frontends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
     /// Device and filesystem analysis is running.
     Preparing,
@@ -77,7 +77,22 @@ pub enum EngineEvent {
     /// The completed image is being verified.
     Verifying,
     /// Image and metadata finalization completed.
-    Complete,
+    Complete {
+        /// Final compressed image path.
+        output: PathBuf,
+        /// Raw byte range extracted.
+        raw_bytes: u64,
+        /// Compressed file size.
+        compressed_bytes: u64,
+        /// SHA-256 of the compressed stream.
+        compressed_sha256: String,
+        /// Verification outcome.
+        verification: VerificationStatus,
+        /// JSON metadata path.
+        metadata_path: PathBuf,
+        /// Durable operation log path.
+        log_path: PathBuf,
+    },
 }
 
 struct Prepared {
@@ -147,7 +162,7 @@ pub fn run_image(request: &ImageRequest) -> Result<()> {
             eprintln!("extracting: {bytes} / {total} bytes");
         }
         EngineEvent::Verifying => eprintln!("verifying image"),
-        EngineEvent::Complete => {}
+        EngineEvent::Complete { .. } => {}
     });
     if result.is_ok() {
         println!(
@@ -195,7 +210,7 @@ pub fn run_image_with_progress(
                 }
                 EngineEvent::Extracting { .. } => stage = "extracting",
                 EngineEvent::Verifying => stage = "verifying",
-                EngineEvent::Complete => stage = "complete",
+                EngineEvent::Complete { .. } => stage = "complete",
                 EngineEvent::Preparing | EngineEvent::WarningUnknownLayout => {}
             }
             on_event(event);
@@ -457,7 +472,15 @@ fn execute(
         prepared.partitions,
     );
     write_sidecar(&request.output, &metadata)?;
-    on_event(EngineEvent::Complete);
+    on_event(EngineEvent::Complete {
+        output: request.output.clone(),
+        raw_bytes: metadata.raw_bytes,
+        compressed_bytes: metadata.compressed_bytes,
+        compressed_sha256: metadata.compressed_sha256.clone(),
+        verification: metadata.verification.status,
+        metadata_path: sidecar_path(&request.output),
+        log_path: append_suffix(&request.output, ".log"),
+    });
     Ok(())
 }
 
