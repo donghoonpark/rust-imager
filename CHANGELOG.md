@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 - 2026-06-14
+
+- Complete extensionless TUI output paths as `.img.zst` or `.img.xz` from the
+  selected compression format.
+- Complete paths ending in `.img` with only the compression extension.
+- Preserve explicit or conflicting extensions for strict engine validation
+  instead of silently rewriting user input.
+
 ## 0.2.1 - 2026-06-14
 
 - Replace the basic wizard with a responsive dashboard for wide, medium, and
