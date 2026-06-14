@@ -104,6 +104,24 @@ exec "$real_findmnt" "\${args[@]}"
 EOF
 chmod 0755 "$work_dir/findmnt"
 
+real_partprobe=$(command -v partprobe)
+cat >"$work_dir/partprobe" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+"$real_partprobe" "\$@"
+for partition in 1 2; do
+    sys_dev="/sys/class/block/${loop_name}p\${partition}/dev"
+    for _ in {1..50}; do
+        [[ -r "\$sys_dev" ]] && break
+        sleep 0.02
+    done
+    IFS=: read -r major minor <"\$sys_dev"
+    rm -f "/dev/sdz\${partition}"
+    mknod "/dev/sdz\${partition}" b "\$major" "\$minor"
+done
+EOF
+chmod 0755 "$work_dir/partprobe"
+
 if [[ ${RUST_IMAGER_DEMO_TRACE:-0} == 1 ]]; then
     real_e2fsck=$(command -v e2fsck)
     cat >"$work_dir/e2fsck" <<EOF
