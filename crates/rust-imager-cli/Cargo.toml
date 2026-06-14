@@ -12,11 +12,11 @@ clap.workspace = true
 crossterm.workspace = true
 nix.workspace = true
 ratatui.workspace = true
-rust-imager-core = { version = "0.2.3", path = "../rust-imager-core" }
-rust-imager-first-boot = { version = "0.2.3", path = "../rust-imager-first-boot" }
-rust-imager-linux = { version = "0.2.3", path = "../rust-imager-linux" }
-rust-imager-pipeline = { version = "0.2.3", path = "../rust-imager-pipeline" }
-rust-imager-tui = { version = "0.2.3", path = "../rust-imager-tui" }
+rust-imager-core = { version = "0.2.5", path = "../rust-imager-core" }
+rust-imager-first-boot = { version = "0.2.5", path = "../rust-imager-first-boot" }
+rust-imager-linux = { version = "0.2.5", path = "../rust-imager-linux" }
+rust-imager-pipeline = { version = "0.2.5", path = "../rust-imager-pipeline" }
+rust-imager-tui = { version = "0.2.5", path = "../rust-imager-tui" }
 serde_json.workspace = true
 signal-hook.workspace = true
 tempfile.workspace = true

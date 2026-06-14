@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.5 - 2026-06-14
+
+- Use `lsblk --paths` with the legacy `NAME` column because util-linux 2.31
+  does not provide the later `PATH` column.
+- Preserve JSON device hierarchy on both util-linux 2.31 and current releases
+  by requesting `NAME`, while continuing to use `findmnt` for mount filtering.
+
+## 0.2.4 - 2026-06-14
+
+- Restore Ubuntu 18.04 compatibility by limiting device discovery to `lsblk`
+  columns supported by util-linux 2.31 while continuing to use `findmnt` for
+  mounted-device filtering.
+
 ## 0.2.3 - 2026-06-14
 
 - Generate timestamped output paths from the selected device and keep automatic

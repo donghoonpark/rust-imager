@@ -26,6 +26,11 @@ use rust_imager_pipeline::verify::{
 use signal_hook::consts::signal::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 
+// Keep this list compatible with util-linux 2.31 (Ubuntu 18.04). PATH and
+// MOUNTPOINTS were added later. The --paths option makes NAME contain the
+// absolute device path, and mounted devices are identified via findmnt below.
+const LSBLK_DISCOVERY_COLUMNS: &str = "NAME,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE";
+
 /// Fully confirmed imaging request.
 #[derive(Debug, Clone)]
 pub struct ImageRequest {
@@ -133,8 +138,9 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
         &[
             "--json",
             "--bytes",
+            "--paths",
             "--output",
-            "NAME,PATH,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE,MOUNTPOINTS",
+            LSBLK_DISCOVERY_COLUMNS,
         ],
     )?;
     let findmnt = run_text(
@@ -647,5 +653,25 @@ mod tests {
                 .join("image.zst")
         );
         assert!(normalized.is_absolute());
+    }
+
+    #[test]
+    fn lsblk_discovery_columns_support_util_linux_2_31() {
+        for unsupported in ["PATH", "MOUNTPOINTS"] {
+            assert!(
+                !LSBLK_DISCOVERY_COLUMNS
+                    .split(',')
+                    .any(|column| column == unsupported)
+            );
+        }
+        for required in [
+            "NAME", "TYPE", "SIZE", "LOG-SEC", "TRAN", "MODEL", "SERIAL", "MAJ:MIN", "RM", "FSTYPE",
+        ] {
+            assert!(
+                LSBLK_DISCOVERY_COLUMNS
+                    .split(',')
+                    .any(|column| column == required)
+            );
+        }
     }
 }

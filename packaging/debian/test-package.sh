@@ -74,4 +74,8 @@ for command_name in "${required_commands[@]}"; do
     }
 done
 
+lsblk --json --bytes --paths \
+    --output "NAME,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE" \
+    >/dev/null
+
 echo "rust-imager $expected_version ($expected_architecture) package smoke test passed"

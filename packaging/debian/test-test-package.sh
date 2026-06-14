@@ -50,13 +50,19 @@ esac
 EOF
 
 chmod 0755 "$fakebin/dpkg-query" "$fakebin/ldd" "$fakebin/rust-imager"
-for tool in e2fsck resize2fs sfdisk mount umount partprobe lsblk findmnt blkid swapon setsid; do
+for tool in e2fsck resize2fs sfdisk mount umount partprobe findmnt blkid swapon setsid; do
     cat >"$fakebin/$tool" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
     chmod 0755 "$fakebin/$tool"
 done
+
+cat >"$fakebin/lsblk" <<'EOF'
+#!/usr/bin/env bash
+[[ "$*" == "--json --bytes --paths --output NAME,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE" ]]
+EOF
+chmod 0755 "$fakebin/lsblk"
 
 run_smoke() {
     env \
