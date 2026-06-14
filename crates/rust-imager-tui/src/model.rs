@@ -91,12 +91,16 @@ pub enum Action {
     SetConfirmation(String),
     /// Replace output path.
     SetOutput(String),
+    /// Set an automatically generated output path.
+    SetDefaultOutput(String),
     /// Select compression.
     SetCompression(Compression),
     /// Select verification.
     SetVerification(VerificationLevel),
     /// Advance after validating the current screen.
     Continue,
+    /// Return to the previous setup screen.
+    Previous,
     /// Mutation started.
     MutationStarted,
     /// Preflight analysis started.
@@ -139,6 +143,7 @@ pub struct AppModel {
     pub confirmation: String,
     /// Final output path.
     pub output: String,
+    output_is_automatic: bool,
     /// Compression policy.
     pub compression: Compression,
     /// Verification policy.
@@ -171,6 +176,7 @@ impl AppModel {
             operation_source: None,
             confirmation: String::new(),
             output: String::new(),
+            output_is_automatic: false,
             compression: Compression::Zstandard { level: 3 },
             verification: VerificationLevel::Decode,
             error: None,
@@ -207,10 +213,23 @@ impl AppModel {
             }
             Action::SelectDevice(_) => self.error = Some("Invalid device selection".into()),
             Action::SetConfirmation(value) => self.confirmation = value,
-            Action::SetOutput(value) => self.output = value,
-            Action::SetCompression(value) => self.compression = value,
+            Action::SetOutput(value) => {
+                self.output = value;
+                self.output_is_automatic = false;
+            }
+            Action::SetDefaultOutput(value) => {
+                self.output = value;
+                self.output_is_automatic = true;
+            }
+            Action::SetCompression(value) => {
+                if self.output_is_automatic {
+                    self.replace_compression_extension(value);
+                }
+                self.compression = value;
+            }
             Action::SetVerification(value) => self.verification = value,
             Action::Continue => self.continue_current(),
+            Action::Previous => self.previous_screen(),
             Action::PreparationStarted => {
                 self.start_operation(now);
                 self.screen = Screen::Preparing;
@@ -378,6 +397,33 @@ impl AppModel {
             }
             Screen::Verification => self.screen = Screen::Review,
             _ => {}
+        }
+    }
+
+    fn previous_screen(&mut self) {
+        self.screen = match self.screen {
+            Screen::ConfirmDevice => Screen::DeviceSelection,
+            Screen::Output => Screen::ConfirmDevice,
+            Screen::Verification => Screen::Output,
+            Screen::Review => Screen::Verification,
+            screen => screen,
+        };
+    }
+
+    fn replace_compression_extension(&mut self, compression: Compression) {
+        let suffix = match compression {
+            Compression::Zstandard { .. } => ".zst",
+            Compression::Xz { .. } => ".xz",
+        };
+        let replace = Path::new(&self.output)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                extension.eq_ignore_ascii_case("zst") || extension.eq_ignore_ascii_case("xz")
+            });
+        if replace {
+            self.output.truncate(self.output.len() - 4);
+            self.output.push_str(suffix);
         }
     }
 

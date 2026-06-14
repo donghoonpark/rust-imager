@@ -1,6 +1,7 @@
 //! Interactive terminal wizard.
 
 use std::io::{self, stdout};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -18,6 +19,8 @@ use rust_imager_core::plan::{Compression, VerificationLevel};
 use rust_imager_core::profile::LayoutClass;
 use rust_imager_tui::model::{Action, AppModel, Screen};
 use rust_imager_tui::view::draw;
+use time::OffsetDateTime;
+use time::format_description::well_known::Iso8601;
 
 use crate::app::{EngineEvent, ImageRequest};
 
@@ -141,6 +144,10 @@ fn event_loop(
         if key.code == KeyCode::Esc {
             bail!("cancelled before mutation");
         }
+        if matches!(key.code, KeyCode::Left | KeyCode::BackTab) {
+            model.reduce(Action::Previous);
+            continue;
+        }
         match model.screen {
             Screen::DeviceSelection => match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -224,10 +231,90 @@ fn select_device(model: &mut AppModel, index: usize) {
     match crate::app::analyze_layout(&device) {
         Ok(layout) => {
             model.reduce(Action::SelectDevice(index));
+            if model.output.is_empty()
+                && let Ok(output) = default_output_path(&device, &std::env::current_dir())
+            {
+                model.reduce(Action::SetDefaultOutput(
+                    output.to_string_lossy().into_owned(),
+                ));
+            }
             model.reduce(Action::SetUnknownLayoutWarning(
                 layout == LayoutClass::WarningUnknown,
             ));
         }
         Err(error) => model.reduce(Action::Failed(format!("{error:#}"))),
+    }
+}
+
+fn default_output_path(
+    device: &DeviceIdentity,
+    current_dir: &Result<PathBuf, std::io::Error>,
+) -> Result<PathBuf> {
+    let directory = current_dir
+        .as_ref()
+        .map_err(|error| anyhow!("unable to resolve current directory: {error}"))?;
+    default_output_path_at(device, directory, OffsetDateTime::now_utc())
+}
+
+fn default_output_path_at(
+    device: &DeviceIdentity,
+    directory: &Path,
+    now: OffsetDateTime,
+) -> Result<PathBuf> {
+    let model = device
+        .model
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let timestamp = now
+        .format(&Iso8601::DEFAULT)
+        .map_err(|error| anyhow!("unable to format output timestamp: {error}"))?;
+    let compact = timestamp
+        .chars()
+        .filter(char::is_ascii_digit)
+        .take(14)
+        .collect::<String>();
+    Ok(directory.join(format!("{model}-{compact}.img.zst")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_output_path_at;
+    use rust_imager_core::device::DeviceIdentity;
+    use std::path::Path;
+    use time::macros::datetime;
+
+    #[test]
+    fn builds_sanitized_timestamped_default_output() {
+        let device = DeviceIdentity {
+            path: "/dev/sda".into(),
+            major_minor: "8:0".into(),
+            serial: "ABC".into(),
+            model: "Virtual eMMC Reader".into(),
+            size_bytes: 64_000_000_000,
+            logical_sector_size: 512,
+            transport: "usb".into(),
+            removable: true,
+        };
+        let output = default_output_path_at(
+            &device,
+            Path::new("/images"),
+            datetime!(2026-06-14 12:34:56 UTC),
+        )
+        .expect("default output");
+        assert_eq!(
+            output,
+            Path::new("/images/virtual-emmc-reader-20260614123456.img.zst")
+        );
     }
 }

@@ -217,3 +217,46 @@ fn preserves_conflicting_output_extension_for_engine_validation() {
 
     assert_eq!(model.output, "/output/board.raw");
 }
+
+#[test]
+fn assigns_and_updates_automatic_output_path() {
+    let mut model = AppModel::new(vec![device()]);
+    model.reduce(Action::SetDefaultOutput(
+        "/images/emmc-reader-20260614-120000.img.zst".into(),
+    ));
+    assert_eq!(model.output, "/images/emmc-reader-20260614-120000.img.zst");
+
+    model.reduce(Action::SetCompression(
+        rust_imager_core::plan::Compression::Xz { level: 3 },
+    ));
+    assert_eq!(model.output, "/images/emmc-reader-20260614-120000.img.xz");
+
+    model.reduce(Action::SetOutput("/images/custom".into()));
+    model.reduce(Action::SetCompression(
+        rust_imager_core::plan::Compression::Zstandard { level: 3 },
+    ));
+    assert_eq!(model.output, "/images/custom");
+}
+
+#[test]
+fn navigates_back_through_setup_without_losing_values() {
+    let mut model = AppModel::new(vec![device()]);
+    model.reduce(Action::SelectDevice(0));
+    model.reduce(Action::SetConfirmation("eMMC Reader".into()));
+    model.reduce(Action::Continue);
+    model.reduce(Action::SetOutput("/images/board".into()));
+    model.reduce(Action::Continue);
+    model.reduce(Action::Continue);
+    assert_eq!(model.screen, Screen::Review);
+
+    model.reduce(Action::Previous);
+    assert_eq!(model.screen, Screen::Verification);
+    model.reduce(Action::Previous);
+    assert_eq!(model.screen, Screen::Output);
+    model.reduce(Action::Previous);
+    assert_eq!(model.screen, Screen::ConfirmDevice);
+    model.reduce(Action::Previous);
+    assert_eq!(model.screen, Screen::DeviceSelection);
+    assert_eq!(model.confirmation, "eMMC Reader");
+    assert_eq!(model.output, "/images/board.img.zst");
+}

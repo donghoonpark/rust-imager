@@ -33,6 +33,7 @@ sha2 = "0.10.9"
 signal-hook = "0.3.18"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
+time = { version = "0.3.47", features = ["formatting", "macros"] }
 tokio = { version = "1.52.3", features = ["macros", "process", "rt-multi-thread", "signal", "sync"] }
 tracing = "0.1.43"
 tracing-appender = "0.2.4"
