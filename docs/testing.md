@@ -119,6 +119,36 @@ all ten architecture/LTS combinations, and retains test artifacts without
 creating a release. A `v<workspace-version>` tag runs the same gates and then
 publishes both packages and `SHA256SUMS` to GitHub Releases.
 
+## Interactive Docker Demo
+
+Build a privileged Ubuntu demo around an installable package:
+
+```bash
+packaging/demo/build.sh \
+  dist/rust-imager_0.2.3_arm64.deb \
+  rust-imager-demo:0.2.3
+```
+
+The container creates a real loop-backed DOS/MBR disk with FAT boot and ext4
+root partitions. `/dev/sdz`, `/dev/sdz1`, and `/dev/sdz2` are real block device
+nodes that share the loop device's major/minor numbers, so destructive resize,
+partition, extraction, compression, and verification paths are exercised.
+
+Run the complete non-interactive transaction:
+
+```bash
+docker run --rm --privileged \
+  -v "$PWD/demo-output:/output" \
+  rust-imager-demo:0.2.3 full-run
+```
+
+Launch the TUI in Ghostty:
+
+```bash
+open -na Ghostty.app --args \
+  -e "$PWD/packaging/demo/launch-ghostty.sh" rust-imager-demo:0.2.3
+```
+
 ## CI
 
 - `ci.yml`: format, Clippy, unit/integration-safe tests, dependency advisories
