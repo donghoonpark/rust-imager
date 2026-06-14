@@ -49,6 +49,23 @@ pub struct ProgressMetrics {
     pub eta: Option<Duration>,
 }
 
+/// Read-only storage plan displayed before mutation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanPreview {
+    /// Original whole-device capacity.
+    pub source_size_bytes: u64,
+    /// Current ext4 filesystem size.
+    pub current_filesystem_bytes: u64,
+    /// Planned ext4 size after shrinking.
+    pub target_filesystem_bytes: u64,
+    /// Raw byte range that will be extracted.
+    pub image_bytes: u64,
+    /// Available bytes on the output filesystem.
+    pub output_available_bytes: u64,
+    /// Root partition that will be modified.
+    pub root_partition: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ProgressSample {
     at: Instant,
@@ -97,6 +114,8 @@ pub enum Action {
     SetCompression(Compression),
     /// Select verification.
     SetVerification(VerificationLevel),
+    /// Store a read-only execution plan preview.
+    SetPlanPreview(PlanPreview),
     /// Advance after validating the current screen.
     Continue,
     /// Return to the previous setup screen.
@@ -148,6 +167,8 @@ pub struct AppModel {
     pub compression: Compression,
     /// Verification policy.
     pub verification: VerificationLevel,
+    /// Read-only plan facts shown during final review.
+    pub plan_preview: Option<PlanPreview>,
     /// Latest error message.
     pub error: Option<String>,
     /// Whether the selected layout is structurally safe but unrecognized.
@@ -179,6 +200,7 @@ impl AppModel {
             output_is_automatic: false,
             compression: Compression::Zstandard { level: 3 },
             verification: VerificationLevel::Decode,
+            plan_preview: None,
             error: None,
             unknown_layout_warning: false,
             progress_bytes: 0,
@@ -228,6 +250,7 @@ impl AppModel {
                 self.compression = value;
             }
             Action::SetVerification(value) => self.verification = value,
+            Action::SetPlanPreview(value) => self.plan_preview = Some(value),
             Action::Continue => self.continue_current(),
             Action::Previous => self.previous_screen(),
             Action::PreparationStarted => {

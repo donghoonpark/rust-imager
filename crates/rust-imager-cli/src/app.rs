@@ -41,6 +41,23 @@ pub struct ImageRequest {
     pub verification: VerificationLevel,
 }
 
+/// Read-only facts calculated before the destructive operation begins.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImagePreview {
+    /// Original whole-device capacity.
+    pub source_size_bytes: u64,
+    /// Current ext4 filesystem size.
+    pub current_filesystem_bytes: u64,
+    /// Planned ext4 filesystem size.
+    pub target_filesystem_bytes: u64,
+    /// Raw byte range that will be extracted.
+    pub image_bytes: u64,
+    /// Available bytes on the output filesystem.
+    pub output_available_bytes: u64,
+    /// Root partition that will be modified.
+    pub root_partition: String,
+}
+
 /// Observable engine state for terminal and non-interactive frontends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineEvent {
@@ -72,6 +89,8 @@ struct Prepared {
     partitions: Vec<PartitionMetadata>,
     original_mbr: rust_imager_core::mbr::Mbr,
     unknown_layout_warning: bool,
+    current_filesystem_bytes: u64,
+    output_available_bytes: u64,
 }
 
 struct Analysis {
@@ -196,6 +215,20 @@ pub fn run_image_with_progress(
     result
 }
 
+/// Calculate the immutable execution plan without mutating the source device.
+pub fn preview_image(request: &ImageRequest) -> Result<ImagePreview> {
+    validate_request(request)?;
+    let prepared = prepare(request)?;
+    Ok(ImagePreview {
+        source_size_bytes: prepared.selected.size_bytes,
+        current_filesystem_bytes: prepared.current_filesystem_bytes,
+        target_filesystem_bytes: prepared.plan.shrink.target_filesystem_bytes,
+        image_bytes: prepared.plan.image_bytes,
+        output_available_bytes: prepared.output_available_bytes,
+        root_partition: prepared.root_path,
+    })
+}
+
 fn validate_request(request: &ImageRequest) -> Result<()> {
     let expected_extension = match request.compression {
         Compression::Zstandard { level } => {
@@ -214,20 +247,26 @@ fn validate_request(request: &ImageRequest) -> Result<()> {
         request.output.extension().and_then(|value| value.to_str()) == Some(expected_extension),
         "output extension must be .{expected_extension}"
     );
-    for path in [
-        request.output.clone(),
-        partial_path(&request.output),
-        sidecar_path(&request.output),
-        sidecar_partial_path(&request.output),
-        append_suffix(&request.output, ".log"),
-    ] {
-        ensure!(
-            !path_occupied(&path)?,
-            "output already exists: {}",
-            path.display()
-        );
+    if let Some(path) = output_conflict(&request.output)? {
+        bail!("output already exists: {}", path.display());
     }
     Ok(())
+}
+
+/// Return the first output artifact that would be overwritten.
+pub fn output_conflict(output: &Path) -> Result<Option<PathBuf>> {
+    for path in [
+        output.to_path_buf(),
+        partial_path(output),
+        sidecar_path(output),
+        sidecar_partial_path(output),
+        append_suffix(output, ".log"),
+    ] {
+        if path_occupied(&path)? {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
 }
 
 fn prepare(request: &ImageRequest) -> Result<Prepared> {
@@ -268,6 +307,7 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(output_parent)?;
     ensure_local_output(&runner, output_parent)?;
+    let output_available_bytes = available_bytes(&runner, output_parent)?;
     let plan = build_plan(PlanInput {
         device_path: selected.path.clone(),
         device_size_bytes: selected.size_bytes,
@@ -276,7 +316,7 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         ext4_minimum_bytes: ext4.minimum_bytes,
         ext4_current_bytes: ext4.current_bytes,
         output_path: request.output.to_string_lossy().into_owned(),
-        output_available_bytes: available_bytes(&runner, output_parent)?,
+        output_available_bytes,
         output_is_local: true,
         compression: request.compression,
         verification: request.verification,
@@ -312,6 +352,8 @@ fn prepare(request: &ImageRequest) -> Result<Prepared> {
         partitions,
         original_mbr: mbr,
         unknown_layout_warning,
+        current_filesystem_bytes: ext4.current_bytes,
+        output_available_bytes,
     })
 }
 
@@ -543,6 +585,28 @@ mod tests {
         let output = directory.path().join("image.zst");
         fs::write(sidecar_path(&output), b"existing").expect("fixture");
         assert!(validate_request(&request(output, Compression::Zstandard { level: 3 })).is_err());
+    }
+
+    #[test]
+    fn reports_each_output_conflict_path() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let output = directory.path().join("image.zst");
+        let conflicts = [
+            output.clone(),
+            partial_path(&output),
+            sidecar_path(&output),
+            sidecar_partial_path(&output),
+            append_suffix(&output, ".log"),
+        ];
+        for conflict in conflicts {
+            fs::write(&conflict, b"existing").expect("fixture");
+            assert_eq!(
+                output_conflict(&output).expect("conflict query"),
+                Some(conflict.clone())
+            );
+            fs::remove_file(conflict).expect("remove fixture");
+        }
+        assert_eq!(output_conflict(&output).expect("clear query"), None);
     }
 
     #[test]

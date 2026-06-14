@@ -2,7 +2,7 @@
 
 use ratatui::{Terminal, backend::TestBackend};
 use rust_imager_core::device::DeviceIdentity;
-use rust_imager_tui::model::{Action, AppModel, OperationPhase, Screen};
+use rust_imager_tui::model::{Action, AppModel, OperationPhase, PlanPreview, Screen};
 use rust_imager_tui::view::draw;
 use std::time::{Duration, Instant};
 
@@ -259,4 +259,20 @@ fn navigates_back_through_setup_without_losing_values() {
     assert_eq!(model.screen, Screen::DeviceSelection);
     assert_eq!(model.confirmation, "eMMC Reader");
     assert_eq!(model.output, "/images/board.img.zst");
+}
+
+#[test]
+fn stores_read_only_plan_preview_for_review() {
+    let mut model = AppModel::new(vec![device()]);
+    let preview = PlanPreview {
+        source_size_bytes: 64_000_000_000,
+        current_filesystem_bytes: 8_000_000_000,
+        target_filesystem_bytes: 3_000_000_000,
+        image_bytes: 3_500_000_000,
+        output_available_bytes: 100_000_000_000,
+        root_partition: "/dev/sda2".into(),
+    };
+    model.reduce(Action::SetPlanPreview(preview.clone()));
+
+    assert_eq!(model.plan_preview, Some(preview));
 }

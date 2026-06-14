@@ -17,7 +17,7 @@ use ratatui::backend::CrosstermBackend;
 use rust_imager_core::device::DeviceIdentity;
 use rust_imager_core::plan::{Compression, VerificationLevel};
 use rust_imager_core::profile::LayoutClass;
-use rust_imager_tui::model::{Action, AppModel, Screen};
+use rust_imager_tui::model::{Action, AppModel, PlanPreview, Screen};
 use rust_imager_tui::view::draw;
 use time::OffsetDateTime;
 use time::format_description::well_known::Iso8601;
@@ -176,51 +176,86 @@ fn event_loop(
                 KeyCode::Enter => model.reduce(Action::Continue),
                 _ => {}
             },
-            Screen::Output => match key.code {
-                KeyCode::F(2) => {
-                    model.reduce(Action::SetCompression(Compression::Zstandard { level: 3 }));
-                }
-                KeyCode::F(3) => {
-                    model.reduce(Action::SetCompression(Compression::Xz { level: 3 }));
-                }
-                KeyCode::Char(value) => model.output.push(value),
-                KeyCode::Backspace => {
-                    model.output.pop();
-                }
-                KeyCode::Enter => model.reduce(Action::Continue),
-                _ => {}
-            },
-            Screen::Verification => match key.code {
-                KeyCode::Char('1') => {
-                    model.reduce(Action::SetVerification(VerificationLevel::None));
-                }
-                KeyCode::Char('2') => {
-                    model.reduce(Action::SetVerification(VerificationLevel::StreamingHash));
-                }
-                KeyCode::Char('3') => {
-                    model.reduce(Action::SetVerification(VerificationLevel::Decode));
-                }
-                KeyCode::Char('4') => {
-                    model.reduce(Action::SetVerification(VerificationLevel::SourceReread));
-                }
-                KeyCode::Enter => model.reduce(Action::Continue),
-                _ => {}
-            },
+            Screen::Output => handle_output_key(&mut model, key.code)?,
+            Screen::Verification => handle_verification_key(&mut model, key.code),
             Screen::Review if key.code == KeyCode::Enter => {
-                let device = model
-                    .selected_device()
-                    .ok_or_else(|| anyhow::anyhow!("no selected device"))?;
-                return Ok(ImageRequest {
-                    device: device.path.clone(),
-                    output: model.output.clone().into(),
-                    confirm_model: model.confirmation.clone(),
-                    compression: model.compression,
-                    verification: model.verification,
-                });
+                return request_from_model(&model);
             }
             _ => {}
         }
     }
+}
+
+fn handle_output_key(model: &mut AppModel, key: KeyCode) -> Result<()> {
+    match key {
+        KeyCode::F(2) => {
+            model.reduce(Action::SetCompression(Compression::Zstandard { level: 3 }));
+        }
+        KeyCode::F(3) => {
+            model.reduce(Action::SetCompression(Compression::Xz { level: 3 }));
+        }
+        KeyCode::Char(value) => model.output.push(value),
+        KeyCode::Backspace => {
+            model.output.pop();
+        }
+        KeyCode::Enter => {
+            model.reduce(Action::Continue);
+            if model.screen == Screen::Verification
+                && let Some(conflict) = crate::app::output_conflict(Path::new(&model.output))?
+            {
+                model.reduce(Action::Previous);
+                model.reduce(Action::Failed(format!(
+                    "Output artifact already exists: {}",
+                    conflict.display()
+                )));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn handle_verification_key(model: &mut AppModel, key: KeyCode) {
+    match key {
+        KeyCode::Char('1') => model.reduce(Action::SetVerification(VerificationLevel::None)),
+        KeyCode::Char('2') => {
+            model.reduce(Action::SetVerification(VerificationLevel::StreamingHash));
+        }
+        KeyCode::Char('3') => model.reduce(Action::SetVerification(VerificationLevel::Decode)),
+        KeyCode::Char('4') => {
+            model.reduce(Action::SetVerification(VerificationLevel::SourceReread));
+        }
+        KeyCode::Enter => match request_from_model(model)
+            .and_then(|request| crate::app::preview_image(&request))
+        {
+            Ok(preview) => {
+                model.reduce(Action::SetPlanPreview(PlanPreview {
+                    source_size_bytes: preview.source_size_bytes,
+                    current_filesystem_bytes: preview.current_filesystem_bytes,
+                    target_filesystem_bytes: preview.target_filesystem_bytes,
+                    image_bytes: preview.image_bytes,
+                    output_available_bytes: preview.output_available_bytes,
+                    root_partition: preview.root_partition,
+                }));
+                model.reduce(Action::Continue);
+            }
+            Err(error) => model.reduce(Action::Failed(format!("{error:#}"))),
+        },
+        _ => {}
+    }
+}
+
+fn request_from_model(model: &AppModel) -> Result<ImageRequest> {
+    let device = model
+        .selected_device()
+        .ok_or_else(|| anyhow!("no selected device"))?;
+    Ok(ImageRequest {
+        device: device.path.clone(),
+        output: model.output.clone().into(),
+        confirm_model: model.confirmation.clone(),
+        compression: model.compression,
+        verification: model.verification,
+    })
 }
 
 fn select_device(model: &mut AppModel, index: usize) {
