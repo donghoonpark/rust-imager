@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 - 2026-06-14
+
+- Replace the basic wizard with a responsive dashboard for wide, medium, and
+  compact terminals.
+- Add setup and operation timelines, prominent destructive-phase warnings, and
+  persistent completion and failure panels.
+- Show live extraction percentage, throughput, elapsed time, ETA, and recent
+  engine events.
+- Add arrow and `j`/`k` device navigation with screen-specific keyboard help.
+- Run imaging on a worker thread so elapsed time and status continue updating
+  during inspection, shrinking, extraction, and verification.
+- Add deterministic Ratatui rendering tests across multiple terminal sizes.
+
 ## 0.1.0 - 2026-06-13
 
 - Add Linux-only Rust TUI and non-interactive CLI.
