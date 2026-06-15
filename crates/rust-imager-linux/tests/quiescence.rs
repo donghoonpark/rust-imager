@@ -31,13 +31,11 @@ impl Runner for FakeRunner {
 fn topology() -> String {
     r#"{
       "blockdevices": [{
-        "path": "/dev/sda",
-        "name": "sda",
-        "type": "disk",
-        "mountpoints": [null],
+        "name": "/dev/sda",
+        "mountpoint": null,
         "children": [
-          {"path":"/dev/sda1","name":"sda1","type":"part","mountpoints":["/mnt/boot"]},
-          {"path":"/dev/sda2","name":"sda2","type":"part","mountpoints":["/mnt/root/sub","/mnt/root"]}
+          {"name":"/dev/sda1","mountpoint":"/mnt/boot"},
+          {"name":"/dev/sda2","mountpoint":"/mnt/root/sub"}
         ]
       }]
     }"#
@@ -46,8 +44,8 @@ fn topology() -> String {
 
 fn unmounted_topology() -> String {
     topology()
-        .replace(r#"["/mnt/boot"]"#, "[null]")
-        .replace(r#"["/mnt/root/sub","/mnt/root"]"#, "[null]")
+        .replace(r#""/mnt/boot""#, "null")
+        .replace(r#""/mnt/root/sub""#, "null")
 }
 
 #[test]
@@ -70,7 +68,16 @@ fn unmounts_every_child_deepest_first() {
         vec![
             vec![OsString::from("/mnt/root/sub")],
             vec![OsString::from("/mnt/boot")],
-            vec![OsString::from("/mnt/root")],
+        ]
+    );
+    assert_eq!(
+        calls[0].args,
+        vec![
+            OsString::from("--json"),
+            OsString::from("--paths"),
+            OsString::from("--output"),
+            OsString::from("NAME,MOUNTPOINT"),
+            OsString::from("/dev/sda"),
         ]
     );
 }

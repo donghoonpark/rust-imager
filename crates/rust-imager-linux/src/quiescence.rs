@@ -49,10 +49,10 @@ struct Topology {
 
 #[derive(Debug, Deserialize)]
 struct Node {
+    #[serde(rename = "name")]
     path: String,
-    name: String,
     #[serde(default)]
-    mountpoints: Vec<Option<String>>,
+    mountpoint: Option<String>,
     #[serde(default)]
     children: Vec<Node>,
 }
@@ -89,8 +89,12 @@ pub fn quiesce_disk(
         }
     }
     for node in &nodes {
-        let active = holders(&node.name).map_err(|source| QuiescenceError::HolderIo {
-            device: node.name.clone(),
+        let name = Path::new(&node.path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&node.path);
+        let active = holders(name).map_err(|source| QuiescenceError::HolderIo {
+            device: name.to_owned(),
             source,
         })?;
         if !active.is_empty() {
@@ -103,7 +107,7 @@ pub fn quiesce_disk(
 
     let mut mounts: Vec<_> = nodes
         .iter()
-        .flat_map(|node| node.mountpoints.iter().flatten().cloned())
+        .filter_map(|node| node.mountpoint.clone())
         .collect();
     mounts.sort_unstable_by(|left, right| {
         path_depth(right)
@@ -122,7 +126,7 @@ pub fn quiesce_disk(
     }
     if let Some(mount) = remaining_nodes
         .iter()
-        .flat_map(|node| node.mountpoints.iter().flatten())
+        .filter_map(|node| node.mountpoint.as_ref())
         .next()
     {
         return Err(QuiescenceError::Mounted(mount.clone()));
@@ -148,7 +152,7 @@ pub fn sysfs_holders(name: &str) -> Result<Vec<String>, std::io::Error> {
 fn read_topology(runner: &dyn Runner, disk: &str) -> Result<Topology, QuiescenceError> {
     let output = runner.run(&spec(
         "lsblk",
-        &["--json", "--output", "PATH,NAME,MOUNTPOINTS", disk],
+        &["--json", "--paths", "--output", "NAME,MOUNTPOINT", disk],
     ))?;
     serde_json::from_str(&output.stdout).map_err(QuiescenceError::from)
 }
