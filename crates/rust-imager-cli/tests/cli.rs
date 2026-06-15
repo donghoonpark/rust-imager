@@ -12,3 +12,16 @@ fn version_reports_package_version() {
         .success()
         .stdout(contains(env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn flash_help_exposes_guarded_verification_controls() {
+    Command::cargo_bin("rust-imager")
+        .expect("binary should build")
+        .args(["flash", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("--image"))
+        .stdout(contains("--confirm-model"))
+        .stdout(contains("--pre-verify"))
+        .stdout(contains("--post-verify"));
+}

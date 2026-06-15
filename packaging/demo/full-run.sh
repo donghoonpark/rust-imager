@@ -25,4 +25,14 @@ jq -e '
 grep -q 'result=success' "$output.log"
 grep -q 'source_modified=true' "$output.log"
 
+rust-imager flash \
+    --image "$output" \
+    --device /dev/sdy \
+    --confirm-model "Virtual Flash Target" \
+    --pre-verify full \
+    --post-verify full
+
+raw_bytes=$(jq -r '.raw_bytes' "$output.json")
+zstd -q -d -c "$output" | cmp -n "$raw_bytes" - /dev/sdy
+
 printf 'Full imaging demo passed: %s\n' "$output"

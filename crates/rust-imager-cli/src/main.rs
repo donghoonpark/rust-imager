@@ -1,12 +1,14 @@
 //! rust-imager executable.
 
 mod app;
+mod flash;
 mod wizard;
 
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
+use rust_imager_core::flash::{PostVerify, PreVerify};
 use rust_imager_core::plan::{Compression, VerificationLevel};
 
 #[derive(Debug, Parser)]
@@ -41,6 +43,24 @@ enum Command {
         #[arg(long, value_enum, default_value_t = VerifyArg::Decode)]
         verify: VerifyArg,
     },
+    /// Flash a raw or compressed image to a confirmed external USB disk.
+    Flash {
+        /// Raw `.img`, `.img.zst`, or `.img.xz` input.
+        #[arg(long)]
+        image: PathBuf,
+        /// Whole external target disk, for example /dev/sda.
+        #[arg(long)]
+        device: String,
+        /// Exact target model string displayed by `list`.
+        #[arg(long)]
+        confirm_model: String,
+        /// Input verification before writing.
+        #[arg(long, value_enum, default_value_t = PreVerifyArg::Basic)]
+        pre_verify: PreVerifyArg,
+        /// Optional target reread after writing.
+        #[arg(long, value_enum, default_value_t = PostVerifyArg::None)]
+        post_verify: PostVerifyArg,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -55,6 +75,19 @@ enum VerifyArg {
     Hash,
     Decode,
     Reread,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum PreVerifyArg {
+    None,
+    Basic,
+    Full,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum PostVerifyArg {
+    None,
+    Full,
 }
 
 fn main() -> Result<()> {
@@ -88,6 +121,28 @@ fn main() -> Result<()> {
                     VerifyArg::Hash => VerificationLevel::StreamingHash,
                     VerifyArg::Decode => VerificationLevel::Decode,
                     VerifyArg::Reread => VerificationLevel::SourceReread,
+                },
+            })?;
+        }
+        Some(Command::Flash {
+            image,
+            device,
+            confirm_model,
+            pre_verify,
+            post_verify,
+        }) => {
+            flash::run(&flash::FlashRequest {
+                image,
+                device,
+                confirm_model,
+                pre_verify: match pre_verify {
+                    PreVerifyArg::None => PreVerify::None,
+                    PreVerifyArg::Basic => PreVerify::Basic,
+                    PreVerifyArg::Full => PreVerify::Full,
+                },
+                post_verify: match post_verify {
+                    PostVerifyArg::None => PostVerify::None,
+                    PostVerifyArg::Full => PostVerify::Full,
                 },
             })?;
         }

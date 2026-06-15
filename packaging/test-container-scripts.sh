@@ -47,6 +47,10 @@ grep -Fq 'ARG UBUNTU_VERSION' "$demo_dockerfile" ||
     fail "demo image does not parameterize Ubuntu"
 grep -Fq 'real_lsblk=' "$demo_entrypoint" ||
     fail "demo does not execute the distribution lsblk"
+grep -Fq '/dev/sdy' "$demo_entrypoint" ||
+    fail "demo does not expose a separate flash target"
+grep -Fq 'rust-imager flash' "$repo_root/packaging/demo/full-run.sh" ||
+    fail "demo does not run a flash transaction"
 
 expected_lts='18.04 20.04 22.04 24.04'
 actual_lts=$("$matrix_driver" --print-lts)
