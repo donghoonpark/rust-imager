@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use rust_imager_core::flash::{ImageFormat, PostVerify, PreVerify};
 use rust_imager_core::mbr::{Mbr, parse_mbr};
 use rust_imager_core::metadata::ImageMetadata;
+use rust_imager_core::plan::Compression;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -92,6 +93,12 @@ pub enum FlashError {
     /// A calculated hash differs from metadata or target reread.
     #[error("SHA-256 mismatch")]
     HashMismatch,
+    /// Sidecar partition geometry differs from decoded sector zero.
+    #[error("sidecar partition geometry does not match the decoded image")]
+    MetadataLayoutMismatch,
+    /// Sidecar compression disagrees with the filename.
+    #[error("sidecar compression does not match the image filename")]
+    MetadataFormatMismatch,
     /// Target cannot contain the decoded image.
     #[error("target capacity {capacity} is smaller than image {image}")]
     TargetTooSmall {
@@ -107,6 +114,7 @@ pub enum FlashError {
 /// # Errors
 ///
 /// Returns [`FlashError`] for I/O, decoder, metadata, hash, or MBR failures.
+#[allow(clippy::too_many_lines)]
 pub fn inspect_image(request: &InspectRequest) -> Result<InspectedImage, FlashError> {
     let sidecar_path = sidecar_path(&request.image);
     let metadata = if sidecar_path.exists() {
@@ -119,6 +127,16 @@ pub fn inspect_image(request: &InspectRequest) -> Result<InspectedImage, FlashEr
     } else {
         None
     };
+    if let Some(metadata) = &metadata {
+        let matches = matches!(
+            (request.format, metadata.compression),
+            (ImageFormat::Zstandard, Compression::Zstandard { .. })
+                | (ImageFormat::Xz, Compression::Xz { .. })
+        ) || request.format == ImageFormat::Raw;
+        if !matches {
+            return Err(FlashError::MetadataFormatMismatch);
+        }
+    }
     let compressed_hash = (request.level == PreVerify::Full)
         .then(|| hash_file(&request.image))
         .transpose()?;
@@ -181,6 +199,24 @@ pub fn inspect_image(request: &InspectRequest) -> Result<InspectedImage, FlashEr
             count / 512,
         )?)
     };
+    if let (Some(metadata), Some(mbr)) = (&metadata, &mbr)
+        && !metadata.partitions.is_empty()
+    {
+        let matches = metadata.partitions.len() == mbr.partitions.len()
+            && metadata
+                .partitions
+                .iter()
+                .zip(&mbr.partitions)
+                .all(|(expected, actual)| {
+                    expected.number == actual.number
+                        && expected.type_code == actual.type_code
+                        && expected.start_lba == actual.start_lba
+                        && expected.end_lba == actual.end_lba
+                });
+        if !matches {
+            return Err(FlashError::MetadataLayoutMismatch);
+        }
+    }
     Ok(InspectedImage {
         raw_bytes: count,
         raw_sha256: Some(raw_hash),

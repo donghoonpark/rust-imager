@@ -1,7 +1,8 @@
 # rust-imager
 
 `rust-imager` is a Linux-only Rust TUI for creating compact, compressed images
-from external SBC eMMC modules exposed by a USB reader as `/dev/sdX`.
+from external SBC eMMC modules exposed by a USB reader as `/dev/sdX`, and for
+flashing raw or compressed images back to a confirmed external disk.
 
 It reduces transfer time by shrinking the offline ext4 root filesystem and its
 final MBR partition before reading from LBA 0 through the new partition end.
@@ -112,6 +113,26 @@ sudo rust-imager image \
 ```
 
 Verification values are `none`, `hash`, `decode`, and `reread`.
+
+Flash an image to another confirmed USB disk:
+
+```bash
+sudo rust-imager flash \
+  --image board.img.zst \
+  --device /dev/sdb \
+  --confirm-model "eMMC Reader" \
+  --pre-verify basic \
+  --post-verify full
+```
+
+Flash inputs may be `.img`, `.img.zst`, or `.img.xz`. Pre-verification values
+are `none`, `basic`, and `full`; `basic` is the default and validates the
+decoded stream and MBR before writing. Post-verification values are `none`
+(default) and `full`, which rereads and hashes the complete written range.
+
+When an adjacent `.json` sidecar exists, it is checked at the selected
+verification level. Missing sidecars produce a strong warning but do not
+prevent flashing. Invalid or mismatched sidecars stop the operation.
 
 ## Output
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 - 2026-06-16
+
+- Add guarded streaming flash support for `.img`, `.img.zst`, and `.img.xz`
+  inputs targeting confirmed external USB `/dev/sdX` disks.
+- Add optional `none`, `basic`, and `full` pre-flash verification with
+  sidecar-aware size, partition geometry, compressed hash, and raw hash checks.
+- Add optional full target reread verification after durable writes.
+- Add a unified TUI operation chooser and flash setup/progress workflow.
+- Extend the Ubuntu 18.04, 20.04, 22.04, and 24.04 loop-backed release matrix
+  to create an image, flash it to a second disk, and compare the written range.
+
 ## 0.2.7 - 2026-06-15
 
 - Keep quiescence compatible with Ubuntu 18.04's util-linux 2.31 by using the

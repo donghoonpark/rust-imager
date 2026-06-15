@@ -55,6 +55,18 @@ that state. A restored image expands on first boot through
 Always retain the `.log` file and avoid write operations until the completed
 stage is known.
 
+## Flashing Images
+
+Flashing overwrites the selected target from byte zero. Verify the target model
+and path before confirming. A failure or disconnect after writing starts can
+leave the target with a partial partition table or filesystem; reflash it from
+the beginning before attempting to boot or mount it.
+
+Use `--pre-verify basic` or `full` unless recovery urgency requires otherwise.
+An adjacent sidecar is optional, but when present it must parse and match the
+image. `--post-verify full` rereads the complete written range and is
+recommended for unreliable USB bridges.
+
 ## Reader Assumption
 
 The USB reader must expose all boot-critical data in the `/dev/sdX` address

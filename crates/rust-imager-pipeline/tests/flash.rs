@@ -1,6 +1,7 @@
 //! Flash image inspection tests.
 
 use std::fs;
+use std::io::Write;
 
 use rust_imager_core::flash::{ImageFormat, PostVerify, PreVerify};
 use rust_imager_pipeline::flash::{FlashRequest, InspectRequest, flash_image, inspect_image};
@@ -97,8 +98,8 @@ fn streams_exact_image_and_rereads_target() {
     let dir = tempdir().expect("tempdir");
     let image = dir.path().join("board.img");
     let target = dir.path().join("target.bin");
-    let bytes = (0..512 * 1024)
-        .map(|value| (value % 251) as u8)
+    let bytes = (0_u64..512 * 1024)
+        .map(|value| u8::try_from(value % 251).expect("bounded byte"))
         .collect::<Vec<_>>();
     fs::write(&image, &bytes).expect("image");
     fs::write(&target, vec![0xaa; bytes.len() * 2]).expect("target");
@@ -150,4 +151,36 @@ fn rejects_target_smaller_than_inspected_image() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn zstd_and_xz_decode_to_the_same_raw_image() {
+    let dir = tempdir().expect("tempdir");
+    let mut raw = vec![0_u8; 128 * 1024];
+    raw[510] = 0x55;
+    raw[511] = 0xaa;
+
+    let zstd_path = dir.path().join("board.img.zst");
+    let mut zstd = zstd::Encoder::new(fs::File::create(&zstd_path).expect("zstd file"), 1)
+        .expect("zstd encoder");
+    zstd.write_all(&raw).expect("zstd write");
+    zstd.finish().expect("zstd finish");
+
+    let xz_path = dir.path().join("board.img.xz");
+    let mut xz = xz2::write::XzEncoder::new(fs::File::create(&xz_path).expect("xz file"), 1);
+    xz.write_all(&raw).expect("xz write");
+    xz.finish().expect("xz finish");
+
+    for (image, format) in [
+        (zstd_path, ImageFormat::Zstandard),
+        (xz_path, ImageFormat::Xz),
+    ] {
+        let inspected = inspect_image(&InspectRequest {
+            image,
+            format,
+            level: PreVerify::Basic,
+        })
+        .expect("inspect");
+        assert_eq!(inspected.raw_bytes, raw.len() as u64);
+    }
 }
