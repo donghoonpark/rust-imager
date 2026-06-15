@@ -159,6 +159,17 @@ open -na Ghostty.app --args \
   -e "$PWD/packaging/demo/launch-ghostty.sh" rust-imager-demo:0.2.3
 ```
 
+Regenerate the README TUI recording from the Ubuntu 24.04 demo image:
+
+```bash
+brew install vhs
+vhs docs/assets/rust-imager-demo.tape
+```
+
+The tape drives the real privileged loop-backed demo and writes
+`docs/assets/rust-imager-demo.gif`. Build the image tag referenced by the tape
+before recording when it is not already present locally.
+
 ## CI
 
 - `ci.yml`: format, Clippy, unit/integration-safe tests, dependency advisories

@@ -9,6 +9,12 @@ The resulting image preserves raw bootloader sectors, the FAT boot partition,
 and the ext4 root partition. A systemd one-shot service expands the restored
 root partition and filesystem on first boot.
 
+<p align="center">
+  <img src="docs/assets/rust-imager-demo.gif"
+       alt="rust-imager TUI imaging a loop-backed SBC eMMC fixture"
+       width="900">
+</p>
+
 ## Warning
 
 This program **modifies the source eMMC**. It runs `e2fsck`, installs first-boot

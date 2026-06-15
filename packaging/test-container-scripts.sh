@@ -9,6 +9,9 @@ build_dockerfile="$repo_root/packaging/docker/Dockerfile.build"
 test_dockerfile="$repo_root/packaging/docker/Dockerfile.test"
 demo_dockerfile="$repo_root/packaging/demo/Dockerfile"
 demo_entrypoint="$repo_root/packaging/demo/entrypoint.sh"
+demo_tape="$repo_root/docs/assets/rust-imager-demo.tape"
+demo_gif="$repo_root/docs/assets/rust-imager-demo.gif"
+readme="$repo_root/README.md"
 dockerignore="$repo_root/.dockerignore"
 
 fail() {
@@ -25,6 +28,12 @@ expect_failure() {
 [[ -f "$build_dockerfile" ]] || fail "build Dockerfile missing"
 [[ -f "$test_dockerfile" ]] || fail "test Dockerfile missing"
 [[ -f "$demo_dockerfile" ]] || fail "demo Dockerfile missing"
+[[ -f "$demo_tape" ]] || fail "README demo tape missing"
+[[ -s "$demo_gif" ]] || fail "README demo GIF missing"
+grep -Fq "docs/assets/rust-imager-demo.gif" "$readme" ||
+    fail "README does not embed the TUI demo GIF"
+grep -Fq "Output docs/assets/rust-imager-demo.gif" "$demo_tape" ||
+    fail "demo tape writes the documented GIF"
 [[ -x "$loop_matrix_driver" ]] || fail "loop matrix driver missing"
 [[ -f "$dockerignore" ]] || fail ".dockerignore missing"
 grep -Fxq 'target' "$dockerignore" || fail "Rust build output is not excluded from Docker context"
