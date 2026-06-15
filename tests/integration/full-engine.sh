@@ -64,20 +64,20 @@ set -euo pipefail
 if [[ " \$* " == *" --bytes "* ]]; then
 cat <<'JSON'
 {"blockdevices":[
-  {"path":"/dev/nvme0n1","name":"nvme0n1","type":"disk","size":68719476736,"log-sec":512,"tran":"nvme","model":"SYSTEM","serial":"SYS","maj:min":"259:0","rm":false,
-   "children":[{"path":"/dev/nvme0n1p1","name":"nvme0n1p1","type":"part","size":68718428160,"fstype":"ext4"}]},
-  {"path":"/dev/sdz","name":"$loop_name","type":"disk","size":1073741824,"log-sec":512,"tran":"usb","model":"Virtual eMMC Reader","serial":"CI-FIXTURE","maj:min":"7:250","rm":true,
+  {"name":"/dev/nvme0n1","type":"disk","size":68719476736,"log-sec":512,"tran":"nvme","model":"SYSTEM","serial":"SYS","maj:min":"259:0","rm":false,
+   "children":[{"name":"/dev/nvme0n1p1","type":"part","size":68718428160,"fstype":"ext4"}]},
+  {"name":"/dev/sdz","type":"disk","size":1073741824,"log-sec":512,"tran":"usb","model":"Virtual eMMC Reader","serial":"CI-FIXTURE","maj:min":"7:250","rm":true,
    "children":[
-     {"path":"/dev/sdz1","name":"${loop_name}p1","type":"part","size":67108864,"fstype":"vfat"},
-     {"path":"/dev/sdz2","name":"${loop_name}p2","type":"part","size":1005584384,"fstype":"ext4"}
+     {"name":"/dev/sdz1","type":"part","size":67108864,"fstype":"vfat"},
+     {"name":"/dev/sdz2","type":"part","size":1005584384,"fstype":"ext4"}
    ]}
 ]}
 JSON
 else
 cat <<'JSON'
-{"blockdevices":[{"path":"/dev/sdz","name":"$loop_name","mountpoints":[null],"children":[
-  {"path":"/dev/sdz1","name":"${loop_name}p1","mountpoints":[null]},
-  {"path":"/dev/sdz2","name":"${loop_name}p2","mountpoints":[null]}
+{"blockdevices":[{"name":"/dev/$loop_name","mountpoint":null,"children":[
+  {"name":"/dev/${loop_name}p1","mountpoint":null},
+  {"name":"/dev/${loop_name}p2","mountpoint":null}
 ]}]}
 JSON
 fi
