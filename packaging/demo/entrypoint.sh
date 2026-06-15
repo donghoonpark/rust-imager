@@ -55,54 +55,36 @@ sync
 umount "$work_dir/root"
 umount "$work_dir/boot"
 
+real_lsblk=$(command -v lsblk)
 cat >"$work_dir/lsblk" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ " \$* " == *" --bytes "* ]]; then
+"$real_lsblk" "\$@" >/dev/null
 cat <<'JSON'
 {"blockdevices":[
-  {"name":"nvme0n1","path":"/dev/nvme0n1","type":"disk","size":1099511627776,"log-sec":512,"tran":"nvme","rm":false,"ro":false,"model":"System Disk","serial":"SYSTEM","maj:min":"259:0","mountpoints":[null]},
-  {"name":"$loop_name","path":"/dev/sdz","type":"disk","size":805306368,"log-sec":512,"tran":"usb","rm":true,"ro":false,"model":"Virtual eMMC Reader","serial":"DEMO-EMMC-001","maj:min":"$(<"/sys/class/block/$loop_name/dev")","mountpoints":[null],
+  {"name":"/dev/nvme0n1","type":"disk","size":1099511627776,"log-sec":512,"tran":"nvme","rm":false,"model":"System Disk","serial":"SYSTEM","maj:min":"259:0"},
+  {"name":"/dev/sdz","type":"disk","size":805306368,"log-sec":512,"tran":"usb","rm":true,"model":"Virtual eMMC Reader","serial":"DEMO-EMMC-001","maj:min":"$(<"/sys/class/block/$loop_name/dev")",
    "children":[
-    {"name":"${loop_name}p1","path":"/dev/sdz1","type":"part","size":67108864,"log-sec":512,"fstype":"vfat","parttype":"c","partflags":"0x80","mountpoints":[null]},
-    {"name":"${loop_name}p2","path":"/dev/sdz2","type":"part","size":736100352,"log-sec":512,"fstype":"ext4","parttype":"83","partflags":null,"mountpoints":[null]}
+    {"name":"/dev/sdz1","type":"part","size":67108864,"log-sec":512,"fstype":"vfat"},
+    {"name":"/dev/sdz2","type":"part","size":736100352,"log-sec":512,"fstype":"ext4"}
    ]}
 ]}
 JSON
 else
+"$real_lsblk" "\$@" >/dev/null
 cat <<'JSON'
 {"blockdevices":[
-  {"name":"$loop_name","path":"/dev/sdz","type":"disk","pkname":null,"mountpoint":null,
+  {"name":"/dev/$loop_name","mountpoint":null,
    "children":[
-    {"name":"${loop_name}p1","path":"/dev/sdz1","type":"part","pkname":"$loop_name","mountpoint":null},
-    {"name":"${loop_name}p2","path":"/dev/sdz2","type":"part","pkname":"$loop_name","mountpoint":null}
+    {"name":"/dev/${loop_name}p1","mountpoint":null},
+    {"name":"/dev/${loop_name}p2","mountpoint":null}
    ]}
 ]}
 JSON
 fi
 EOF
 chmod 0755 "$work_dir/lsblk"
-
-real_findmnt=$(command -v findmnt)
-cat >"$work_dir/findmnt" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-args=( "\$@" )
-has_target=false
-for ((i = 0; i < \${#args[@]}; i++)); do
-    if [[ \${args[i]} == -T ]]; then
-        has_target=true
-    fi
-done
-if \$has_target; then
-    cat <<'JSON'
-{"filesystems":[{"source":"/dev/nvme0n1","target":"/","fstype":"ext4","options":"rw"}]}
-JSON
-    exit 0
-fi
-exec "$real_findmnt" "\${args[@]}"
-EOF
-chmod 0755 "$work_dir/findmnt"
 
 real_partprobe=$(command -v partprobe)
 cat >"$work_dir/partprobe" <<EOF

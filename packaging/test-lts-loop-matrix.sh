@@ -36,48 +36,34 @@ fi
 package=$1
 version=$2
 architecture=$3
-platform=$(platform_for "$architecture")
 selected_version=${4:-}
+platform_for "$architecture" >/dev/null
 
 [[ -f "$package" ]] || {
     echo "package does not exist: $package" >&2
     exit 1
 }
-command -v docker >/dev/null || {
-    echo "docker is required" >&2
-    exit 1
-}
-docker buildx version >/dev/null
-
-context=$(mktemp -d)
-trap 'rm -rf "$context"' EXIT
-cp "$package" "$context/rust-imager.deb"
-cp "$repo_root/packaging/debian/test-package.sh" "$context/test-package.sh"
 
 versions=("${lts_versions[@]}")
 if [[ -n "$selected_version" ]]; then
-    supported=false
-    for ubuntu_version in "${lts_versions[@]}"; do
-        if [[ "$ubuntu_version" == "$selected_version" ]]; then
-            supported=true
-            break
-        fi
-    done
-    [[ "$supported" == true ]] || {
+    [[ " ${lts_versions[*]} " == *" $selected_version "* ]] || {
         echo "unsupported Ubuntu LTS version: $selected_version" >&2
         exit 1
     }
     versions=("$selected_version")
 fi
 
+output=$(mktemp -d)
+trap 'rm -rf "$output"' EXIT
+
 for ubuntu_version in "${versions[@]}"; do
-    echo "Testing rust-imager $version ($architecture) on Ubuntu $ubuntu_version"
-    docker buildx build \
-        --platform "$platform" \
-        --file "$repo_root/packaging/docker/Dockerfile.test" \
-        --build-arg "UBUNTU_VERSION=$ubuntu_version" \
-        --build-arg "EXPECTED_VERSION=$version" \
-        --build-arg "EXPECTED_ARCH=$architecture" \
-        --progress plain \
-        "$context"
+    image_tag="rust-imager-demo:${version}-${architecture}-ubuntu-${ubuntu_version}"
+    echo "Loop-testing rust-imager $version ($architecture) on Ubuntu $ubuntu_version"
+    "$repo_root/packaging/demo/build.sh" \
+        "$package" "$image_tag" "$ubuntu_version" "$architecture"
+    rm -rf "${output:?}"/*
+    docker run --rm --privileged \
+        --platform "$(platform_for "$architecture")" \
+        --volume "$output:/output" \
+        "$image_tag" full-run
 done
