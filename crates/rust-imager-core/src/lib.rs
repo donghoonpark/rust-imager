@@ -2,6 +2,7 @@
 
 pub mod device;
 pub mod filesystem;
+pub mod flash;
 pub mod mbr;
 pub mod metadata;
 pub mod plan;
