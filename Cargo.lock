@@ -1168,7 +1168,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rust-imager"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "rust-imager-core"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "proptest",
  "serde",
@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "rust-imager-first-boot"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "rust-imager-core",
  "tempfile",
@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "rust-imager-linux"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "nix",
  "rust-imager-core",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "rust-imager-pipeline"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "criterion",
  "rust-imager-core",
@@ -1245,7 +1245,7 @@ dependencies = [
 
 [[package]]
 name = "rust-imager-tui"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "crossterm",
  "ratatui",

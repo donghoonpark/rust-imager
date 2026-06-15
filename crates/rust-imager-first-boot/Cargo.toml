@@ -7,7 +7,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-rust-imager-core = { version = "0.2.5", path = "../rust-imager-core" }
+rust-imager-core = { version = "0.2.6", path = "../rust-imager-core" }
 thiserror.workspace = true
 
 [dev-dependencies]
