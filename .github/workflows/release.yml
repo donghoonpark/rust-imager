@@ -78,9 +78,6 @@ jobs:
           - architecture: amd64
             ubuntu: '24.04'
             runner: ubuntu-24.04
-          - architecture: amd64
-            ubuntu: '26.04'
-            runner: ubuntu-24.04
           - architecture: arm64
             ubuntu: '18.04'
             runner: ubuntu-24.04-arm
@@ -92,9 +89,6 @@ jobs:
             runner: ubuntu-24.04-arm
           - architecture: arm64
             ubuntu: '24.04'
-            runner: ubuntu-24.04-arm
-          - architecture: arm64
-            ubuntu: '26.04'
             runner: ubuntu-24.04-arm
     steps:
       - name: Check out repository
@@ -114,6 +108,15 @@ jobs:
         run: |
           package="dist/rust-imager_${PACKAGE_VERSION}_${ARCHITECTURE}.deb"
           packaging/test-lts-matrix.sh \
+            "$package" "$PACKAGE_VERSION" "$ARCHITECTURE" "$UBUNTU_VERSION"
+      - name: Run full loop imaging transaction
+        env:
+          PACKAGE_VERSION: ${{ needs.metadata.outputs.package-version }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          UBUNTU_VERSION: ${{ matrix.ubuntu }}
+        run: |
+          package="dist/rust-imager_${PACKAGE_VERSION}_${ARCHITECTURE}.deb"
+          packaging/test-lts-loop-matrix.sh \
             "$package" "$PACKAGE_VERSION" "$ARCHITECTURE" "$UBUNTU_VERSION"
 
   publish:

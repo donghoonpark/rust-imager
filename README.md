@@ -41,9 +41,10 @@ GitHub Releases provide one Debian package for each supported architecture:
 - `rust-imager_<version>_amd64.deb`
 - `rust-imager_<version>_arm64.deb`
 
-The same package is install-tested on Ubuntu 18.04, 20.04, 22.04, 24.04, and
-26.04. Download the package matching `dpkg --print-architecture` together with
-`SHA256SUMS`, then verify and install it:
+The same package is install-tested and exercised through a full loop-backed
+imaging transaction on Ubuntu 18.04, 20.04, 22.04, and 24.04. Download the
+package matching `dpkg --print-architecture` together with `SHA256SUMS`, then
+verify and install it:
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS

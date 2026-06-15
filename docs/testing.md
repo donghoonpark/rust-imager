@@ -110,12 +110,20 @@ packaging/test-lts-matrix.sh \
   dist/rust-imager_0.1.0_amd64.deb 0.1.0 amd64
 ```
 
-The matrix is Ubuntu 18.04, 20.04, 22.04, 24.04, and 26.04. Passing a fourth
-argument tests only that version. A missing image, failed package dependency,
-unresolved shared library, or emulation failure stops the run.
+The matrix is Ubuntu 18.04, 20.04, 22.04, and 24.04. Passing a fourth argument
+tests only that version. A missing image, failed package dependency, unresolved
+shared library, or emulation failure stops the run.
+
+Run the destructive transaction against a real loop-backed MBR disk on the
+same matrix:
+
+```bash
+packaging/test-lts-loop-matrix.sh \
+  dist/rust-imager_0.1.0_amd64.deb 0.1.0 amd64
+```
 
 Manual dispatch of `release.yml` builds `amd64` and `arm64` packages, executes
-all ten architecture/LTS combinations, and retains test artifacts without
+all eight architecture/LTS combinations, and retains test artifacts without
 creating a release. A `v<workspace-version>` tag runs the same gates and then
 publishes both packages and `SHA256SUMS` to GitHub Releases.
 
@@ -126,7 +134,9 @@ Build a privileged Ubuntu demo around an installable package:
 ```bash
 packaging/demo/build.sh \
   dist/rust-imager_0.2.3_arm64.deb \
-  rust-imager-demo:0.2.3
+  rust-imager-demo:0.2.3 \
+  18.04 \
+  arm64
 ```
 
 The container creates a real loop-backed DOS/MBR disk with FAT boot and ext4
@@ -156,4 +166,5 @@ open -na Ghostty.app --args \
 - `heavy-ci.yml`: scheduled/manual privileged fixtures, device-mapper failure,
   real image downloads, and QEMU first-boot expansion.
 - `release.yml`: Ubuntu 18.04-based `amd64`/`arm64` packages, installation tests
-  on Ubuntu 18.04 through 26.04, and guarded tag release publication.
+  and full loop imaging on Ubuntu 18.04 through 24.04, plus guarded tag release
+  publication.
