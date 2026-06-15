@@ -103,6 +103,10 @@ pub enum FlashError {
 }
 
 /// Decode and validate an image before target mutation.
+///
+/// # Errors
+///
+/// Returns [`FlashError`] for I/O, decoder, metadata, hash, or MBR failures.
 pub fn inspect_image(request: &InspectRequest) -> Result<InspectedImage, FlashError> {
     let sidecar_path = sidecar_path(&request.image);
     let metadata = if sidecar_path.exists() {
@@ -186,6 +190,10 @@ pub fn inspect_image(request: &InspectRequest) -> Result<InspectedImage, FlashEr
 }
 
 /// Decode and durably stream an image to a target.
+///
+/// # Errors
+///
+/// Returns [`FlashError`] for target capacity, I/O, size, or hash failures.
 pub fn flash_image(
     request: &FlashRequest,
     mut progress: impl FnMut(u64, u64),
@@ -233,7 +241,7 @@ pub fn flash_image(
     }
     target
         .flush()
-        .and_then(|_| target.sync_all())
+        .and_then(|()| target.sync_all())
         .map_err(|source| io_error(&request.target, source))?;
     let hash = hex(&hasher.finalize());
     if request
@@ -261,6 +269,7 @@ pub fn flash_image(
 }
 
 /// Return the adjacent metadata path.
+#[must_use]
 pub fn sidecar_path(image: &Path) -> PathBuf {
     let mut value = image.as_os_str().to_os_string();
     value.push(".json");
@@ -288,7 +297,9 @@ fn hash_prefix(path: &Path, limit: u64) -> Result<String, FlashError> {
     let mut remaining = limit;
     let mut buffer = vec![0_u8; 1024 * 1024];
     while remaining > 0 {
-        let wanted = buffer.len().min(usize::try_from(remaining).unwrap_or(usize::MAX));
+        let wanted = buffer
+            .len()
+            .min(usize::try_from(remaining).unwrap_or(usize::MAX));
         let read = file
             .read(&mut buffer[..wanted])
             .map_err(|source| io_error(path, source))?;

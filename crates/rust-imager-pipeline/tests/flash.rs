@@ -121,7 +121,10 @@ fn streams_exact_image_and_rereads_target() {
     assert_eq!(result.bytes_written, bytes.len() as u64);
     assert!(result.post_verified);
     assert_eq!(&fs::read(target).expect("read")[..bytes.len()], bytes);
-    assert_eq!(updates.last(), Some(&(bytes.len() as u64, bytes.len() as u64)));
+    assert_eq!(
+        updates.last(),
+        Some(&(bytes.len() as u64, bytes.len() as u64))
+    );
 }
 
 #[test]

@@ -148,8 +148,10 @@ fn main() -> Result<()> {
         }
         None => {
             let devices = app::discover(None)?;
-            let request = wizard::run(devices)?;
-            wizard::run_operation(&request)?;
+            match wizard::run(devices)? {
+                wizard::WizardRequest::Image(request) => wizard::run_operation(&request)?,
+                wizard::WizardRequest::Flash(request) => wizard::run_flash_operation(&request)?,
+            }
         }
     }
     Ok(())

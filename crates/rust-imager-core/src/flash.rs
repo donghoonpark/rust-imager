@@ -46,16 +46,24 @@ pub struct ImageFormatError;
 
 impl ImageFormat {
     /// Infer the format from a supported filename.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ImageFormatError`] when the filename has no supported suffix.
     pub fn from_path(path: &Path) -> Result<Self, ImageFormatError> {
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         if name.ends_with(".img.zst") {
             Ok(Self::Zstandard)
         } else if name.ends_with(".img.xz") {
             Ok(Self::Xz)
-        } else if name.ends_with(".img") {
+        } else if Path::new(&name)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("img"))
+        {
             Ok(Self::Raw)
         } else {
             Err(ImageFormatError)
