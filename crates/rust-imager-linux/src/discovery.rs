@@ -43,6 +43,7 @@ struct Lsblk {
 
 #[derive(Debug, Deserialize)]
 struct BlockDevice {
+    #[serde(rename = "name")]
     path: String,
     #[serde(rename = "type")]
     kind: String,

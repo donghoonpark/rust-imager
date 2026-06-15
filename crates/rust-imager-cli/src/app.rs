@@ -26,10 +26,10 @@ use rust_imager_pipeline::verify::{
 use signal_hook::consts::signal::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 
-// Keep this list compatible with util-linux 2.31 (Ubuntu 18.04). In
-// particular, MOUNTPOINTS was added later; mounted devices are identified via
-// findmnt below instead.
-const LSBLK_DISCOVERY_COLUMNS: &str = "PATH,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE";
+// Keep this list compatible with util-linux 2.31 (Ubuntu 18.04). PATH and
+// MOUNTPOINTS were added later. The --paths option makes NAME contain the
+// absolute device path, and mounted devices are identified via findmnt below.
+const LSBLK_DISCOVERY_COLUMNS: &str = "NAME,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE";
 
 /// Fully confirmed imaging request.
 #[derive(Debug, Clone)]
@@ -135,7 +135,13 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
     let lsblk = run_text(
         &runner,
         "lsblk",
-        &["--json", "--bytes", "--output", LSBLK_DISCOVERY_COLUMNS],
+        &[
+            "--json",
+            "--bytes",
+            "--paths",
+            "--output",
+            LSBLK_DISCOVERY_COLUMNS,
+        ],
     )?;
     let findmnt = run_text(
         &runner,
@@ -651,13 +657,15 @@ mod tests {
 
     #[test]
     fn lsblk_discovery_columns_support_util_linux_2_31() {
-        assert!(
-            !LSBLK_DISCOVERY_COLUMNS
-                .split(',')
-                .any(|column| column == "MOUNTPOINTS")
-        );
+        for unsupported in ["PATH", "MOUNTPOINTS"] {
+            assert!(
+                !LSBLK_DISCOVERY_COLUMNS
+                    .split(',')
+                    .any(|column| column == unsupported)
+            );
+        }
         for required in [
-            "PATH", "TYPE", "SIZE", "LOG-SEC", "TRAN", "MODEL", "SERIAL", "MAJ:MIN", "RM", "FSTYPE",
+            "NAME", "TYPE", "SIZE", "LOG-SEC", "TRAN", "MODEL", "SERIAL", "MAJ:MIN", "RM", "FSTYPE",
         ] {
             assert!(
                 LSBLK_DISCOVERY_COLUMNS
