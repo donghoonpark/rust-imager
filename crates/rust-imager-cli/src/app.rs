@@ -31,6 +31,11 @@ use signal_hook::iterator::Signals;
 // absolute device path, and mounted devices are identified via findmnt below.
 const LSBLK_DISCOVERY_COLUMNS: &str = "NAME,TYPE,SIZE,LOG-SEC,TRAN,MODEL,SERIAL,MAJ:MIN,RM,FSTYPE";
 
+// Keep discovery compatible with findmnt from util-linux 2.31 (Ubuntu 18.04).
+// --real was added later; findmnt already reports /dev paths for block-backed
+// filesystems without it.
+const FINDMNT_DISCOVERY_ARGS: &[&str] = &["--json", "--output", "TARGET,SOURCE"];
+
 /// Fully confirmed imaging request.
 #[derive(Debug, Clone)]
 pub struct ImageRequest {
@@ -143,11 +148,7 @@ pub fn discover(output: Option<&Path>) -> Result<Vec<DeviceIdentity>> {
             LSBLK_DISCOVERY_COLUMNS,
         ],
     )?;
-    let findmnt = run_text(
-        &runner,
-        "findmnt",
-        &["--json", "--real", "--output", "TARGET,SOURCE"],
-    )?;
+    let findmnt = run_text(&runner, "findmnt", FINDMNT_DISCOVERY_ARGS)?;
     discover_candidates(
         &lsblk,
         &findmnt,
@@ -673,5 +674,14 @@ mod tests {
                     .any(|column| column == required)
             );
         }
+    }
+
+    #[test]
+    fn findmnt_discovery_args_support_util_linux_2_31() {
+        assert!(!FINDMNT_DISCOVERY_ARGS.contains(&"--real"));
+        assert_eq!(
+            FINDMNT_DISCOVERY_ARGS,
+            ["--json", "--output", "TARGET,SOURCE"]
+        );
     }
 }

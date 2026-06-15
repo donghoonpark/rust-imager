@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6 - 2026-06-15
+
+- Restore Ubuntu 18.04 device discovery by avoiding the `findmnt --real`
+  option, which is not supported by util-linux 2.31.
+- Add a regression test that keeps the discovery arguments compatible with
+  the `findmnt` version shipped by Ubuntu 18.04.
+
 ## 0.2.5 - 2026-06-14
 
 - Use `lsblk --paths` with the legacy `NAME` column because util-linux 2.31
