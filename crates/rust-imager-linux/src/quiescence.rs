@@ -126,8 +126,7 @@ pub fn quiesce_disk(
     }
     if let Some(mount) = remaining_nodes
         .iter()
-        .filter_map(|node| node.mountpoint.as_ref())
-        .next()
+        .find_map(|node| node.mountpoint.as_ref())
     {
         return Err(QuiescenceError::Mounted(mount.clone()));
     }

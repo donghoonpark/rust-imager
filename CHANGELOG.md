@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7 - 2026-06-15
+
+- Keep quiescence compatible with Ubuntu 18.04's util-linux 2.31 by using the
+  legacy `NAME` and singular `MOUNTPOINT` columns from `lsblk`.
+- Exercise package installation and the complete privileged loop-backed
+  imaging transaction on Ubuntu 18.04, 20.04, 22.04, and 24.04 in release CI.
+- Parameterize the Docker demo by Ubuntu release and make its compatibility
+  shims validate the distribution's real `lsblk` and `findmnt` commands.
+
 ## 0.2.6 - 2026-06-15
 
 - Restore Ubuntu 18.04 device discovery by avoiding the `findmnt --real`
